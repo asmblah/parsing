@@ -10,7 +10,7 @@
 'use strict';
 
 var _ = require('lodash'),
-    getLineNumber = require('./getLineNumber'),
+    getLineNumber = require('../getLineNumber'),
     util = require('util'),
     Exception = require('./Exception');
 
