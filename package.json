@@ -24,7 +24,9 @@
     "mocha": "mocha --recursive test/",
     "test": "npm run jshint && npm run mocha"
   },
-  "dependencies": {},
+  "dependencies": {
+    "lodash": "^3.10.0"
+  },
   "devDependencies": {
     "chai": "^2.3.0",
     "jshint": "^2.8.0",
