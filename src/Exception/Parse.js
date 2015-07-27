@@ -10,6 +10,7 @@
 'use strict';
 
 var _ = require('lodash'),
+    getLineNumber = require('./getLineNumber'),
     util = require('util'),
     Exception = require('./Exception');
 
@@ -46,7 +47,7 @@ _.extend(ParseException.prototype, {
     getLineNumber: function () {
         var exception = this;
 
-        return util.getLineNumber(exception.text, exception.getFurthestMatchEnd());
+        return getLineNumber(exception.text, exception.getFurthestMatchEnd());
     },
 
     getText: function () {
