@@ -25,7 +25,7 @@
     "test": "npm run jshint && npm run mocha"
   },
   "dependencies": {
-    "lodash": "^3.10.0"
+    "microdash": "^1.0.0"
   },
   "devDependencies": {
     "chai": "^2.3.0",
@@ -37,10 +37,5 @@
   "engines": {
     "node": ">=0.6"
   },
-  "licenses": [
-    {
-      "type": "MIT",
-      "url": "https://github.com/asmblah/parsing/raw/master/MIT-LICENSE.txt"
-    }
-  ]
+  "license": "MIT"
 }

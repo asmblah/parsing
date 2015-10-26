@@ -9,7 +9,7 @@
 
 'use strict';
 
-var _ = require('lodash'),
+var _ = require('microdash'),
     getLineNumber = require('../getLineNumber'),
     util = require('util'),
     Exception = require('./Exception');

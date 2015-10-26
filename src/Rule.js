@@ -9,7 +9,7 @@
 
 'use strict';
 
-var _ = require('lodash'),
+var _ = require('microdash'),
     copy = require('./copy');
 
 function Rule(name, captureName, ifNoMatch, processor, options) {
