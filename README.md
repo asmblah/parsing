@@ -81,6 +81,63 @@ console.log(parser.parse('waldo:=1;'));
  */
 ```
 
+Extending a grammar / Defining custom rules
+-------------------------------------------
+Sometimes it can be handy to extend an existing grammar by defining custom rules and overriding some existing ones.
+For example, given this simple grammar we could add a new statement type to it:
+
+```javascript
+var grammarSpec = {
+    ignore: 'whitespace',
+    rules: {
+        'go_statement': {
+            components: [{what: /go/, allowMerge: false}]
+        },
+        'end_statement': {
+            components: [{what: /end/, allowMerge: false}]
+        },
+        'whitespace': /\s+/,
+        'single_statement': {
+            components: {oneOf: ['go_statement', 'end_statement']}
+        },
+        'statement': {
+            components: ['single_statement', /;/]
+        },
+        'program': {
+            components: {name: 'statements', zeroOrMoreOf: 'statement'}
+        }
+    },
+    start: 'program'
+};
+
+// Note the third `options` argument here, which we use to pass the custom rule specs,
+// adding support for the new `do_something_custom;` statement to the above grammar
+var parser = require('parsing').create(grammarSpec, null, {
+    rules: {
+        'do_something_statement': {
+            components: [{what: /do_something_custom/, allowMerge: false}]
+        },
+        'single_statement': {
+            // Override `single_statement`, but refer back to the original
+            components: {oneOf: ['do_something_statement', 'single_statement']}
+        }
+    }
+});
+
+console.log(parser.parse('go; do_something_custom; end;'));
+/**
+ * Gives:
+ * {
+ *     name: 'program',
+ *     statements: [
+ *         { name: 'go_statement' },
+ *         { name: 'do_something_statement' },
+ *         { name: 'end_statement' }
+ *     ]
+ * }
+ */
+```
+
 Keeping up to date
 ------------------
 - [Follow me on Twitter](https://twitter.com/@asmblah) for updates: [https://twitter.com/@asmblah](https://twitter.com/@asmblah)

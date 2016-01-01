@@ -16,7 +16,9 @@ var _ = require('microdash'),
     ParseException = require('./Exception/Parse'),
     Rule = require('./Rule');
 
-function Parser(grammarSpec, stderr) {
+function Parser(grammarSpec, stderr, options) {
+    options = options || {};
+
     this.errorHandler = null;
     this.furthestIgnoreMatch = null;
     this.furthestIgnoreMatchOffset = -1;
@@ -24,6 +26,7 @@ function Parser(grammarSpec, stderr) {
     this.furthestMatchOffset = -1;
     this.grammarSpec = grammarSpec;
     this.matchCaches = [];
+    this.options = options;
     this.state = null;
     this.stderr = stderr;
 
@@ -242,6 +245,7 @@ function Parser(grammarSpec, stderr) {
                     };
                 }
             },
+            originalRules = {},
             rules = {};
 
         // Special BeginningOfFile rule
@@ -265,20 +269,28 @@ function Parser(grammarSpec, stderr) {
         }, {}, null));
 
         // Go through and create objects for all rules in this grammar first so we can set up circular references
-        _.each(grammarSpec.rules, function (ruleSpec, name) {
-            var rule;
-
-            rule = new Rule(
+        function createRule(ruleSpec, name) {
+            return new Rule(
                 name,
                 ruleSpec.captureAs || null,
                 ruleSpec.ifNoMatch || null,
                 ruleSpec.processor || null,
                 ruleSpec.options || null
             );
+        }
+        _.each(grammarSpec.rules, function (ruleSpec, name) {
+            var rule = createRule(ruleSpec, name);
+
+            // Store 'original' rules here too, as rules may be overridden by options
+            originalRules[name] = rule;
             rules[name] = rule;
         });
+        _.each(options.rules || {}, function (ruleSpec, name) {
+            // Create custom rule objects
+            rules[name] = createRule(ruleSpec, name);
+        });
 
-        _.each(grammarSpec.rules, function (ruleSpec, name) {
+        function defineRule(ruleSpec, ruleName, rules, selfReferencingRuleMap) {
             function createComponent(componentSpec) {
                 var arg,
                     args = {},
@@ -362,6 +374,15 @@ function Parser(grammarSpec, stderr) {
                     throw new Exception('Parser :: Invalid componentSpec "' + componentSpec + '" specified');
                 }
 
+                // Custom rule refers to the original in grammar spec
+                if (
+                    qualifierName === 'rule' &&
+                    arg.name === ruleName &&
+                    hasOwn.call(selfReferencingRuleMap, ruleName)
+                ) {
+                    arg = selfReferencingRuleMap[ruleName];
+                }
+
                 if (!qualifiers[qualifierName]) {
                     throw new Exception('Parser :: Invalid component - qualifier name "' + qualifierName + '" is invalid');
                 }
@@ -369,7 +390,22 @@ function Parser(grammarSpec, stderr) {
                 return new Component(parser, createMatchCache(), qualifierName, qualifiers[qualifierName], arg, args, name);
             }
 
-            rules[name].setComponent(createComponent(ruleSpec.components || ruleSpec));
+            rules[ruleName].setComponent(createComponent(ruleSpec.components || ruleSpec));
+        }
+
+        _.each(grammarSpec.rules, function (ruleSpec, ruleName) {
+            if (hasOwn.call(options.rules || {}, ruleName)) {
+                // Rule has been overridden: initialise its rule object in `originalRules`,
+                // as any references of an overridden rule to itself will actually refer
+                // back to the original rule and not the one built from the new, overridden spec.
+                defineRule(ruleSpec, ruleName, originalRules, rules);
+                return;
+            }
+
+            defineRule(ruleSpec, ruleName, rules, rules);
+        });
+        _.each(options.rules || {}, function (ruleSpec, ruleName) {
+            defineRule(ruleSpec, ruleName, rules, originalRules);
         });
 
         parser.ignoreRule = rules[grammarSpec.ignore] || null;

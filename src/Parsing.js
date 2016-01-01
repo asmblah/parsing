@@ -7,8 +7,8 @@ function Parsing(Parser) {
 }
 
 _.extend(Parsing.prototype, {
-    create: function (grammarSpec, stderr) {
-        return new this.Parser(grammarSpec, stderr);
+    create: function (grammarSpec, stderr, options) {
+        return new this.Parser(grammarSpec, stderr, options);
     }
 });
 
