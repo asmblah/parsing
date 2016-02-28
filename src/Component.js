@@ -119,6 +119,7 @@ function createSubMatch(text, match, subMatch, component, offset) {
     if (component.args.captureOffsetAs) {
         (function (offset) {
             match.components[component.args.captureOffsetAs] = {
+                length: subMatch.textLength,
                 line: getLineNumber(text, offset),
                 offset: offset
             };

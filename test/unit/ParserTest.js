@@ -480,7 +480,8 @@ describe('Parser', function () {
                         right: '2',
                         capturedRightOffset: {
                             offset: 6,
-                            line: 3
+                            line: 3,
+                            length: 1
                         }
                     }
                 },
@@ -504,7 +505,33 @@ describe('Parser', function () {
                         operator: '+',
                         capturedRightOffset: {
                             offset: 6,
-                            line: 3
+                            line: 3,
+                            length: 1
+                        }
+                    }
+                },
+                'with longer match': {
+                    grammarSpec: {
+                        ignore: 'whitespace',
+                        rules: {
+                            'operator': /\+/,
+                            'number': /\d+(?:\.\d+)?/,
+                            'whitespace': /\s+/,
+                            'expression': {
+                                components: [{name: 'left', what: 'number'}, {name: 'operator', what: 'operator'}, {what: 'number', captureOffsetAs: 'capturedRightOffset'}]
+                            }
+                        },
+                        start: 'expression'
+                    },
+                    text: '\n\n126 + 24123',
+                    expectedAST: {
+                        name: 'expression',
+                        left: '126',
+                        operator: '+',
+                        capturedRightOffset: {
+                            offset: 8,
+                            line: 3,
+                            length: 5
                         }
                     }
                 }
