@@ -15,10 +15,6 @@ var _ = require('microdash'),
 
 describe('Parser', function () {
     describe('parse()', function () {
-        function check(scenario) {
-            checkGrammarAndTextGeneratesAST(scenario.grammarSpec, scenario.text, scenario.expectedAST);
-        }
-
         function checkGrammarAndTextGeneratesAST(grammarSpec, text, expectedAST) {
             var grammarSpecString = JSON.stringify(grammarSpec, function (key, value) {
                 if (value instanceof RegExp) {
@@ -32,6 +28,10 @@ describe('Parser', function () {
 
                 expect(parser.parse(text)).to.deep.equal(expectedAST);
             });
+        }
+
+        function check(scenario) {
+            checkGrammarAndTextGeneratesAST(scenario.grammarSpec, scenario.text, scenario.expectedAST);
         }
 
         describe('processor option', function () {
