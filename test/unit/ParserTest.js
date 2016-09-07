@@ -11,6 +11,7 @@
 
 var _ = require('microdash'),
     expect = require('chai').expect,
+    nowdoc = require('nowdoc'),
     Parser = require('../../src/Parser');
 
 describe('Parser', function () {
@@ -481,6 +482,7 @@ describe('Parser', function () {
                         capturedRightOffset: {
                             offset: 6,
                             line: 3,
+                            column: 5,
                             length: 1
                         }
                     }
@@ -506,6 +508,7 @@ describe('Parser', function () {
                         capturedRightOffset: {
                             offset: 6,
                             line: 3,
+                            column: 5,
                             length: 1
                         }
                     }
@@ -531,6 +534,7 @@ describe('Parser', function () {
                         capturedRightOffset: {
                             offset: 8,
                             line: 3,
+                            column: 7,
                             length: 5
                         }
                     }
@@ -727,6 +731,119 @@ describe('Parser', function () {
                         {name: 'do_something_statement'},
                         {name: 'end_statement'}
                     ]
+                });
+            });
+        });
+
+        describe('capture all offsets option', function () {
+            it('should support capturing an offset for every AST node', function () {
+                var grammarSpec = {
+                        ignore: 'whitespace',
+                        rules: {
+                            'go_statement': {
+                                components: [{what: /go/, allowMerge: false}]
+                            },
+                            'do_something_statement': {
+                                components: [
+                                    {what: /do_something_custom/, allowMerge: false},
+                                    {name: 'thing', rule: 'do_thing_arg'}
+                                ]
+                            },
+                            'some_identifier': {
+                                components: [(/\w/), (/\w+/)] // Multiple components just for testing concatenation
+                            },
+                            'do_thing_arg': {
+                                components: {name: 'fallen_back_identifier', rule: 'with_fallback'}
+                            },
+                            'with_fallback': {
+                                components: [{name: 'something_that_wont_match', optionally: /AAAA/}, {name: 'identifier', rule: 'some_identifier'}],
+                                ifNoMatch: {component: 'something_that_wont_match', capture: 'identifier'}
+                            },
+                            'end_statement': {
+                                components: [{what: /end/, allowMerge: false}],
+                                processor: function () {
+                                    return {
+                                        name: 'end_statement'
+                                        // Ensure `my_offset` is added to the resulting node,
+                                        // even though this processor has ignored it
+                                    };
+                                }
+                            },
+                            'whitespace': /\s+/,
+                            'single_statement': {
+                                components: {oneOf: ['go_statement', 'do_something_statement', 'end_statement']}
+                            },
+                            'statement': {
+                                components: ['single_statement', /;/]
+                            },
+                            'program': {
+                                components: {name: 'statements', zeroOrMoreOf: 'statement'}
+                            }
+                        },
+                        start: 'program'
+                    },
+                    options = {
+                        captureAllOffsetsAs: 'my_offset'
+                    },
+                    parser = new Parser(grammarSpec, null, options),
+                    code = nowdoc(function () {/*<<<EOS
+go;
+
+
+  do_something_custom   open_it;
+
+
+    end;
+EOS
+*/;}); //jshint ignore:line
+
+                expect(parser.parse(code)).to.deep.equal({
+                    name: 'program',
+                    statements: [
+                        {
+                            name: 'go_statement',
+                            my_offset: {
+                                length: 3,
+                                line: 1,
+                                column: 1,
+                                offset: 0
+                            }
+                        },
+                        {
+                            name: 'do_something_statement',
+                            thing: {
+                                name: 'do_thing_arg',
+                                fallen_back_identifier: 'open_it',
+                                my_offset: {
+                                    length: 7,
+                                    line: 4,
+                                    column: 25,
+                                    offset: 30
+                                }
+                            },
+                            my_offset: {
+                                length: 30,
+                                line: 4,
+                                column: 3,
+                                offset: 8
+                            }
+                        },
+                        {
+                            name: 'end_statement',
+                            my_offset: {
+                                length: 4,
+                                line: 7,
+                                column: 5,
+                                offset: 45
+                            }
+                        }
+                    ],
+                    my_offset: {
+                        length: 49,
+                        line: 1,
+                        column: 1,
+                        offset: 0
+                    }
                 });
             });
         });

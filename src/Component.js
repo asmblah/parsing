@@ -11,20 +11,27 @@
 
 var _ = require('microdash'),
     copy = require('./copy'),
+    getColumnNumber = require('./getColumnNumber'),
     getLineNumber = require('./getLineNumber'),
     undef;
 
-function Component(parser, matchCache, qualifierName, qualifier, arg, args, name) {
+function Component(parser, matchCache, qualifierName, qualifier, arg, args, name, options) {
     this.arg = arg;
     this.args = args;
+    this.captureOffsetAs = args.captureOffsetAs || options.captureAllOffsetsAs;
     this.matchCache = matchCache;
     this.name = name;
+    this.options = options;
     this.parser = parser;
     this.qualifier = qualifier;
     this.qualifierName = qualifierName;
 }
 
 _.extend(Component.prototype, {
+    getOffsetCaptureName: function () {
+        return this.captureOffsetAs;
+    },
+
     match: function (text, offset, options) {
         var component = this,
             match = component.matchCache[offset],
@@ -48,11 +55,11 @@ _.extend(Component.prototype, {
         }
 
         if (component.name !== null || component.args.allowMerge === false || component.args.captureOffsetAs) {
-            match = createSubMatch(text, match, subMatch, component, offset);
+            match = createSubMatch(text, subMatch, component, offset);
         } else {
             // Component is not named: merge its captures in if an array
             if (_.isArray(subMatch.components)) {
-                match = mergeCaptures(match, subMatch);
+                match = mergeCaptures(subMatch, component, text, offset);
             } else {
                 match = subMatch;
             }
@@ -75,7 +82,9 @@ function allElementsAreStrings(array) {
     return allStrings;
 }
 
-function mergeCaptures(match, subMatch) {
+function mergeCaptures(subMatch, component, text, offset) {
+    var match;
+
     if (allElementsAreStrings(subMatch.components)) {
         match = {
             components: subMatch.components.join(''),
@@ -91,6 +100,15 @@ function mergeCaptures(match, subMatch) {
                 copy(match.components, value);
             }
         });
+
+        if (component.captureOffsetAs && subMatch.components.length > 1) {
+            match.components[component.captureOffsetAs] = {
+                length: subMatch.textLength,
+                line: getLineNumber(text, offset + subMatch.textOffset),
+                column: getColumnNumber(text, offset + subMatch.textOffset),
+                offset: offset + subMatch.textOffset
+            };
+        }
     }
 
     if (subMatch.name) {
@@ -102,10 +120,11 @@ function mergeCaptures(match, subMatch) {
     return match;
 }
 
-function createSubMatch(text, match, subMatch, component, offset) {
+function createSubMatch(text, subMatch, component, offset) {
     // Component is named: don't attempt to merge an array in
-    match = {
+    var match = {
         components: {},
+        isEmpty: subMatch.isEmpty || false,
         textLength: subMatch.textLength,
         textOffset: subMatch.textOffset
     };
@@ -116,11 +135,12 @@ function createSubMatch(text, match, subMatch, component, offset) {
         match.components[component.name] = subMatch.components;
     }
 
-    if (component.args.captureOffsetAs) {
+    if (component.captureOffsetAs) {
         (function (offset) {
-            match.components[component.args.captureOffsetAs] = {
+            match.components[component.captureOffsetAs] = {
                 length: subMatch.textLength,
                 line: getLineNumber(text, offset),
+                column: getColumnNumber(text, offset),
                 offset: offset
             };
         }(offset + match.textOffset));

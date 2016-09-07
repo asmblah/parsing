@@ -23,7 +23,8 @@ function Rule(name, captureName, ifNoMatch, processor, options) {
 
 _.extend(Rule.prototype, {
     match: function (text, offset, options) {
-        var component,
+        var capturedOffset,
+            component,
             rule = this,
             match;
 
@@ -52,7 +53,15 @@ _.extend(Rule.prototype, {
         }
 
         if (rule.processor) {
+            if (rule.component.getOffsetCaptureName()) {
+                capturedOffset = match.components[rule.component.getOffsetCaptureName()];
+            }
+
             match.components = rule.processor(match.components);
+
+            if (rule.component.getOffsetCaptureName()) {
+                match.components[rule.component.getOffsetCaptureName()] = capturedOffset;
+            }
         }
 
         return match;
