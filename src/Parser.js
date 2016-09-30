@@ -66,7 +66,9 @@ function Parser(grammarSpec, stderr, options) {
                         matches.push(componentMatch.components);
 
                         if (textOffset === null) {
-                            textOffset = componentMatch.textOffset;
+                            if (!componentMatch.isEmpty) {
+                                textOffset = componentMatch.textOffset;
+                            }
                         } else {
                             textLength += componentMatch.textOffset;
                         }
@@ -134,6 +136,7 @@ function Parser(grammarSpec, stderr, options) {
                     }
 
                     return {
+                        isEmpty: true,
                         components: args.wrapInArray ? [] : '',
                         textLength: 0,
                         textOffset: 0
@@ -387,7 +390,18 @@ function Parser(grammarSpec, stderr, options) {
                     throw new Exception('Parser :: Invalid component - qualifier name "' + qualifierName + '" is invalid');
                 }
 
-                return new Component(parser, createMatchCache(), qualifierName, qualifiers[qualifierName], arg, args, name);
+                return new Component(
+                    parser,
+                    createMatchCache(),
+                    qualifierName,
+                    qualifiers[qualifierName],
+                    arg,
+                    args,
+                    name,
+                    parser.options.captureAllOffsets ?
+                        grammarSpec.offsets || 'offset' :
+                        null
+                );
             }
 
             rules[ruleName].setComponent(createComponent(ruleSpec.components || ruleSpec));
