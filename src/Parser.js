@@ -259,7 +259,7 @@ function Parser(grammarSpec, stderr, options) {
                 textLength: 0,
                 textOffset: textOffset
             } : null;
-        }, {}, null, parser.options));
+        }, {}, null));
 
         // Special EndOfFile rule
         rules['<EOF>'] = new Rule('<EOF>', null, null);
@@ -269,7 +269,7 @@ function Parser(grammarSpec, stderr, options) {
                 textLength: 0,
                 textOffset: textOffset
             } : null;
-        }, {}, null, parser.options));
+        }, {}, null));
 
         // Go through and create objects for all rules in this grammar first so we can set up circular references
         function createRule(ruleSpec, name) {
@@ -398,7 +398,9 @@ function Parser(grammarSpec, stderr, options) {
                     arg,
                     args,
                     name,
-                    parser.options
+                    parser.options.captureAllOffsets ?
+                        grammarSpec.offsets || 'offset' :
+                        null
                 );
             }
 

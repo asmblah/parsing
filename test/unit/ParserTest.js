@@ -780,10 +780,11 @@ describe('Parser', function () {
                                 components: {name: 'statements', zeroOrMoreOf: 'statement'}
                             }
                         },
-                        start: 'program'
+                        start: 'program',
+                        offsets: 'my_offset'
                     },
                     options = {
-                        captureAllOffsetsAs: 'my_offset'
+                        captureAllOffsets: true
                     },
                     parser = new Parser(grammarSpec, null, options),
                     code = nowdoc(function () {/*<<<EOS

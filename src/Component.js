@@ -15,13 +15,12 @@ var _ = require('microdash'),
     getLineNumber = require('./getLineNumber'),
     undef;
 
-function Component(parser, matchCache, qualifierName, qualifier, arg, args, name, options) {
+function Component(parser, matchCache, qualifierName, qualifier, arg, args, name, captureOffsetAs) {
     this.arg = arg;
     this.args = args;
-    this.captureOffsetAs = args.captureOffsetAs || options.captureAllOffsetsAs;
+    this.captureOffsetAs = args.captureOffsetAs || captureOffsetAs;
     this.matchCache = matchCache;
     this.name = name;
-    this.options = options;
     this.parser = parser;
     this.qualifier = qualifier;
     this.qualifierName = qualifierName;
