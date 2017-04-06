@@ -12,12 +12,13 @@
 var _ = require('microdash'),
     copy = require('./copy');
 
-function Rule(name, captureName, ifNoMatch, processor, options) {
+function Rule(parser, name, captureName, ifNoMatch, processor, options) {
     this.captureName = captureName;
     this.component = null;
     this.ifNoMatch = ifNoMatch;
     this.name = name;
     this.options = options;
+    this.parser = parser;
     this.processor = processor;
 }
 
@@ -57,7 +58,15 @@ _.extend(Rule.prototype, {
                 capturedOffset = match.components[rule.component.getOffsetCaptureName()];
             }
 
-            match.components = rule.processor(match.components);
+            match.components = rule.processor(match.components, function (text, options, startRule) {
+                var reentrantMatch = rule.parser.parse(text, options, startRule);
+
+                // Ensure we clear the cache after reentering the parser, as the parent parser "scope"
+                // could be corrupted by using the cache from this nested match
+                rule.parser.clearMatchCache();
+
+                return reentrantMatch;
+            });
 
             if (rule.component.getOffsetCaptureName()) {
                 match.components[rule.component.getOffsetCaptureName()] = capturedOffset;

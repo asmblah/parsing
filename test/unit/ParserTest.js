@@ -735,6 +735,104 @@ describe('Parser', function () {
             });
         });
 
+        describe('custom start rule', function () {
+            it('should support specifying a different rule to start parsing from', function () {
+                var grammarSpec = {
+                        ignore: 'whitespace',
+                        rules: {
+                            'go_statement': {
+                                components: [{what: /go/, allowMerge: false}]
+                            },
+                            'end_statement': {
+                                components: [{what: /end/, allowMerge: false}]
+                            },
+                            'whitespace': /\s+/,
+                            'single_statement': {
+                                components: {oneOf: ['go_statement', 'end_statement']}
+                            },
+                            'statement': {
+                                components: ['single_statement', /;/]
+                            },
+                            'detached_statement': {
+                                components: [{what: /detached/, allowMerge: false}]
+                            },
+                            'program': {
+                                components: {name: 'statements', zeroOrMoreOf: 'statement'}
+                            }
+                        },
+                        start: 'program'
+                    },
+                    parser = new Parser(grammarSpec);
+
+                expect(parser.parse('detached;', {}, 'detached_statement')).to.deep.equal({
+                    name: 'detached_statement'
+                });
+            });
+        });
+
+        describe('reentrancy', function () {
+            it('should support calling the parser from the processor() callback of a rule', function () {
+                var grammarSpec = {
+                        ignore: 'whitespace',
+                        rules: {
+                            'go_statement': {
+                                components: [{what: /go/, allowMerge: false}]
+                            },
+                            'detached_heredoc_innards': {
+                                components: {name: 'contents', oneOrMoreOf: 'heredoc_inner_statement'}
+                            },
+                            'heredoc_inner_statement': {
+                                components: [{what: /nested/, allowMerge: false}]
+                            },
+                            'end_statement': {
+                                components: [{what: /end/, allowMerge: false}]
+                            },
+                            'whitespace': /\s+/,
+                            'single_statement': {
+                                components: {oneOf: ['go_statement', 'heredoc_statement', 'end_statement']}
+                            },
+                            'statement': {
+                                components: ['single_statement', /;/]
+                            },
+                            'heredoc_statement': {
+                                components: [{name: 'string', what: /<<<(\w+)(.*)\1/, captureIndex: 2}],
+                                processor: function (node, parse) {
+                                    var innardsMatch = parse(node.string, {}, 'detached_heredoc_innards');
+
+                                    if (innardsMatch === null) {
+                                        return node;
+                                    }
+
+                                    return {
+                                        name: 'heredoc',
+                                        contents: innardsMatch.contents
+                                    };
+                                }
+                            },
+                            'program': {
+                                components: {name: 'statements', zeroOrMoreOf: 'statement'}
+                            }
+                        },
+                        start: 'program'
+                    },
+                    parser = new Parser(grammarSpec);
+
+                expect(parser.parse('go; <<<EOS nested EOS; end;')).to.deep.equal({
+                    name: 'program',
+                    statements: [
+                        {name: 'go_statement'},
+                        {
+                            name: 'heredoc',
+                            contents: [
+                                {name: 'heredoc_inner_statement'}
+                            ]
+                        },
+                        {name: 'end_statement'}
+                    ]
+                });
+            });
+        });
+
         describe('capture all offsets option', function () {
             it('should support capturing an offset for every AST node', function () {
                 var grammarSpec = {

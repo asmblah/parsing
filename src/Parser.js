@@ -27,6 +27,7 @@ function Parser(grammarSpec, stderr, options) {
     this.grammarSpec = grammarSpec;
     this.matchCaches = [];
     this.options = options;
+    this.rules = null;
     this.state = null;
     this.stderr = stderr;
 
@@ -252,7 +253,7 @@ function Parser(grammarSpec, stderr, options) {
             rules = {};
 
         // Special BeginningOfFile rule
-        rules['<BOF>'] = new Rule('<BOF>', null, null);
+        rules['<BOF>'] = new Rule(parser, '<BOF>', null, null);
         rules['<BOF>'].setComponent(new Component(parser, createMatchCache(), 'what', qualifiers.what, function (text, offset, textOffset) {
             return offset === 0 ? {
                 components: '',
@@ -262,7 +263,7 @@ function Parser(grammarSpec, stderr, options) {
         }, {}, null));
 
         // Special EndOfFile rule
-        rules['<EOF>'] = new Rule('<EOF>', null, null);
+        rules['<EOF>'] = new Rule(parser, '<EOF>', null, null);
         rules['<EOF>'].setComponent(new Component(parser, createMatchCache(), 'what', qualifiers.what, function (text, offset, textOffset) {
             return offset + textOffset === text.length ? {
                 components: '',
@@ -274,6 +275,7 @@ function Parser(grammarSpec, stderr, options) {
         // Go through and create objects for all rules in this grammar first so we can set up circular references
         function createRule(ruleSpec, name) {
             return new Rule(
+                parser,
                 name,
                 ruleSpec.captureAs || null,
                 ruleSpec.ifNoMatch || null,
@@ -422,12 +424,21 @@ function Parser(grammarSpec, stderr, options) {
             defineRule(ruleSpec, ruleName, rules, originalRules);
         });
 
+        parser.rules = rules;
         parser.ignoreRule = rules[grammarSpec.ignore] || null;
         parser.startRule = rules[grammarSpec.start];
     }(this));
 }
 
 _.extend(Parser.prototype, {
+    clearMatchCache: function () {
+        _.each(this.matchCaches, function (matchCache) {
+            _.each(matchCache, function (value, name) {
+                delete matchCache[name];
+            });
+        });
+    },
+
     getErrorHandler: function () {
         var parser = this;
 
@@ -466,17 +477,15 @@ _.extend(Parser.prototype, {
         }
     },
 
-    parse: function (text, options) {
+    parse: function (text, options, startRule) {
         var parser = this,
             errorHandler = parser.getErrorHandler(),
-            rule = parser.startRule,
+            rule = startRule ?
+                parser.rules[startRule] :
+                parser.startRule,
             match;
 
-        _.each(parser.matchCaches, function (matchCache) {
-            _.each(matchCache, function (value, name) {
-                delete matchCache[name];
-            });
-        });
+        parser.clearMatchCache();
 
         parser.furthestIgnoreMatch = null;
         parser.furthestIgnoreMatchOffset = -1;
