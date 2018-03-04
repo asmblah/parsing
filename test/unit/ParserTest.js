@@ -36,27 +36,76 @@ describe('Parser', function () {
         }
 
         describe('processor option', function () {
-            check({
-                grammarSpec: {
-                    rules: {
-                        'number': {
-                            name: 'value',
-                            what: /\d+/,
-                            processor: function (match) {
-                                return {
-                                    name: 'custom',
-                                    value: 'before ' + match.value + ' after'
-                                };
+            describe('simple example with only one grammar rule', function () {
+                check({
+                    grammarSpec: {
+                        rules: {
+                            'number': {
+                                name: 'value',
+                                what: /\d+/,
+                                processor: function (match) {
+                                    return {
+                                        name: 'custom',
+                                        value: 'before ' + match.value + ' after'
+                                    };
+                                }
                             }
-                        }
+                        },
+                        start: 'number'
                     },
-                    start: 'number'
-                },
-                text: '128',
-                expectedAST: {
-                    name: 'custom',
-                    value: 'before 128 after'
-                }
+                    text: '128',
+                    expectedAST: {
+                        name: 'custom',
+                        value: 'before 128 after'
+                    }
+                });
+            });
+
+            describe('when the rule is matched twice due to alternation', function () {
+                check({
+                    grammarSpec: {
+                        ignore: 'whitespace',
+                        rules: {
+                            whitespace: /\s+/,
+
+                            do: {
+                                components: [
+                                    /do/,
+                                    /\(/,
+                                    {
+                                        name: 'value',
+                                        what: [/\d+/]
+                                    },
+                                    /\)/
+                                ],
+                                processor: function (match) {
+                                    return {
+                                        name: 'custom',
+                                        value: 'before ' + match.value + ' after'
+                                    };
+                                }
+                            },
+
+                            // A rule that will invoke the `do` rule but never fully match
+                            wont_match: ['do', /wont_match/],
+
+                            // A rule that will invoke the `do` rule and then fully match
+                            will_match: ['do', /done/],
+
+                            full_command: {
+                                // Try `wont_match` first, to check that when it fails to fully match
+                                // its state doesn't corrupt the `will_match` attempt
+                                oneOf: ['wont_match', 'will_match']
+                            }
+                        },
+                        start: 'full_command'
+                    },
+                    text: 'do(21) done',
+                    expectedAST: {
+                        name: 'custom',
+                        value: 'before 21 after'
+                    }
+                });
             });
         });
 

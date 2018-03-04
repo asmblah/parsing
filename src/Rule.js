@@ -10,15 +10,53 @@
 'use strict';
 
 var _ = require('microdash'),
-    copy = require('./copy');
+    copy = require('./copy'),
+    undef;
 
-function Rule(parser, name, captureName, ifNoMatch, processor, options) {
+/**
+ * Represents a single rule in the grammar
+ *
+ * @param {Parser} parser
+ * @param {object} matchCache
+ * @param {string} name
+ * @param {string|null} captureName An optional different name to use for any matches for the rule
+ * @param {Object|null} ifNoMatch
+ * @param {Function|null} processor An optional custom callback to process any matches for the rule
+ * @param {Object|null} options
+ * @constructor
+ */
+function Rule(parser, matchCache, name, captureName, ifNoMatch, processor, options) {
+    /**
+     * @type {string|null}
+     */
     this.captureName = captureName;
+    /**
+     * @type {Component|null}
+     */
     this.component = null;
+    /**
+     * @type {Object|null}
+     */
     this.ifNoMatch = ifNoMatch;
+    /**
+     * @type {Object}
+     */
+    this.matchCache = matchCache;
+    /**
+     * @type {string}
+     */
     this.name = name;
+    /**
+     * @type {Object|null}
+     */
     this.options = options;
+    /**
+     * @type {Parser}
+     */
     this.parser = parser;
+    /**
+     * @type {Function|null}
+     */
     this.processor = processor;
 }
 
@@ -27,7 +65,11 @@ _.extend(Rule.prototype, {
         var capturedOffset,
             component,
             rule = this,
-            match;
+            match = rule.matchCache[offset];
+
+        if (match !== undef) {
+            return match;
+        }
 
         options = options || {};
 
@@ -72,6 +114,8 @@ _.extend(Rule.prototype, {
                 match.components[rule.component.getOffsetCaptureName()] = capturedOffset;
             }
         }
+
+        rule.matchCache[offset] = match;
 
         return match;
     },
