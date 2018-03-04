@@ -29,11 +29,11 @@
   },
   "devDependencies": {
     "chai": "^2.3.0",
-    "jshint": "^2.8.0",
+    "jshint": "^2.9.5",
     "mocha": "^2.2.5",
     "nowdoc": "^1.0.1",
     "sinon": "^1.15.4",
-    "sinon-chai": "^2.7.0"
+    "sinon-chai": "^2.14.0"
   },
   "engines": {
     "node": ">=0.6"
