@@ -201,26 +201,87 @@ describe('Parser', function () {
             });
         });
 
-        describe('whitespace delimiter: "ignore" option but with "ignoreWhitespace" arg set to override', function () {
-            check({
-                grammarSpec: {
-                    ignore: 'whitespace',
-                    rules: {
-                        'add': /\+/,
-                        'expression': [{name: 'left', what: 'string', ignoreWhitespace: false}, {name: 'operator', what: 'add'}, {name: 'right', what: 'string'}],
-                        'string': /[\d\s]+/,
-                        'whitespace': /\s+/
+        describe('whitespace delimiter: "ignore" option', function () {
+            describe('should be overridden when "ignoreWhitespace" arg is set', function () {
+                check({
+                    grammarSpec: {
+                        ignore: 'whitespace',
+                        rules: {
+                            'add': /\+/,
+                            'expression': [
+                                {name: 'left', what: 'string'},
+                                {name: 'operator', what: 'add'},
+                                {name: 'right', what: 'string'}
+                            ],
+                            'string': {what: /[\d\s]+/, ignoreWhitespace: false},
+                            'whitespace': /\s+/
+                        },
+                        start: 'expression'
                     },
-                    start: 'expression'
-                },
-                text: '321 + 89',
-                expectedAST: {
-                    name: 'expression',
-                    // Check that space after number is captured too
-                    left: '321 ',
-                    operator: '+',
-                    right: '89'
-                }
+                    text: '321 + 89',
+                    expectedAST: {
+                        name: 'expression',
+                        left: '321 ',
+                        operator: '+',
+                        // Check that space before number is captured too
+                        right: ' 89'
+                    }
+                });
+            });
+
+            describe('should be inherited by sub-components when "ignoreWhitespace" arg is false', function () {
+                check({
+                    grammarSpec: {
+                        ignore: 'whitespace',
+                        rules: {
+                            'add': /\+/,
+                            'expression': [
+                                {name: 'left', what: 'string'},
+                                {name: 'operator', what: 'add'},
+                                {name: 'right', what: 'string', ignoreWhitespace: false}
+                            ],
+                            'string': /[\d\s]+/,
+                            'whitespace': /\s+/
+                        },
+                        start: 'expression'
+                    },
+                    text: '321 + 89',
+                    expectedAST: {
+                        name: 'expression',
+                        left: '321 ',
+                        operator: '+',
+                        // Check that space before number is captured too
+                        right: ' 89'
+                    }
+                });
+            });
+
+            describe('should only be inherited by sub-components until "ignoreWhitespace" arg is true again', function () {
+                check({
+                    grammarSpec: {
+                        ignore: 'whitespace',
+                        rules: {
+                            'add': /\+/,
+                            'expression': [
+                                {name: 'left', what: 'string'},
+                                {name: 'operator', what: 'add'},
+                                // `ignoreWhitespace` arg here should be overridden by the one on the rule below
+                                {name: 'right', what: 'string', ignoreWhitespace: false}
+                            ],
+                            'string': {what: /[\d\s]+/, ignoreWhitespace: true},
+                            'whitespace': /\s+/
+                        },
+                        start: 'expression'
+                    },
+                    text: '321 + 89',
+                    expectedAST: {
+                        name: 'expression',
+                        left: '321 ',
+                        operator: '+',
+                        // Space before number should not be captured, as the `ignoreWhitespace` arg was overridden again
+                        right: '89'
+                    }
+                });
             });
         });
 

@@ -40,6 +40,17 @@ _.extend(Component.prototype, {
             return match;
         }
 
+        // Cascade ignoreWhitespace down to descendants of this component
+        if (component.args.ignoreWhitespace === false) {
+            options = _.extend({}, options, {
+                ignoreWhitespace: false
+            });
+        } else if (component.args.ignoreWhitespace === true) {
+            options = _.extend({}, options, {
+                ignoreWhitespace: true
+            });
+        }
+
         subMatch = component.qualifier(text, offset, component.arg, component.args, options);
 
         if (subMatch === null) {
