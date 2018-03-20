@@ -35,6 +35,12 @@ describe('Parser', function () {
             checkGrammarAndTextGeneratesAST(scenario.grammarSpec, scenario.text, scenario.expectedAST);
         }
 
+        function parseAndCheck(scenario) {
+            var parser = new Parser(scenario.grammarSpec);
+
+            expect(parser.parse(scenario.text)).to.deep.equal(scenario.expectedAST);
+        }
+
         describe('processor option', function () {
             describe('simple example with only one grammar rule', function () {
                 check({
@@ -180,28 +186,60 @@ describe('Parser', function () {
         });
 
         describe('whitespace delimiter: "ignore" option', function () {
-            check({
-                grammarSpec: {
-                    ignore: 'whitespace',
-                    rules: {
-                        'add': /\+/,
-                        'expression': [{name: 'left', what: 'number'}, {name: 'operator', what: 'add'}, {name: 'right', what: 'number'}],
-                        'number': /\d+/,
-                        'whitespace': /\s+/
+            describe('should be able to skip whitespace', function () {
+                check({
+                    grammarSpec: {
+                        ignore: 'whitespace',
+                        rules: {
+                            'add': /\+/,
+                            'expression': [{name: 'left', what: 'number'}, {name: 'operator', what: 'add'}, {name: 'right', what: 'number'}],
+                            'number': /\d+/,
+                            'whitespace': /\s+/
+                        },
+                        start: 'expression'
                     },
-                    start: 'expression'
-                },
-                text: '321 + 89',
-                expectedAST: {
-                    name: 'expression',
-                    left: '321',
-                    operator: '+',
-                    right: '89'
-                }
+                    text: '321 + 89',
+                    expectedAST: {
+                        name: 'expression',
+                        left: '321',
+                        operator: '+',
+                        right: '89'
+                    }
+                });
             });
-        });
 
-        describe('whitespace delimiter: "ignore" option', function () {
+            it('should be able to skip whitespace at the start of the string when there is an error handler', function () {
+                function ErrorHandler() {}
+
+                ErrorHandler.prototype.handle = function (parseError) {
+                    throw parseError;
+                };
+
+                parseAndCheck({
+                    grammarSpec: {
+                        ignore: 'whitespace',
+                        ErrorHandler: ErrorHandler,
+                        rules: {
+                            'add': /\+/,
+                            'expression': [{name: 'left', what: 'number'}, {
+                                name: 'operator',
+                                what: 'add'
+                            }, {name: 'right', what: 'number'}],
+                            'number': /\d+/,
+                            'whitespace': /\s+/
+                        },
+                        start: 'expression'
+                    },
+                    text: '   321 + 89',
+                    expectedAST: {
+                        name: 'expression',
+                        left: '321',
+                        operator: '+',
+                        right: '89'
+                    }
+                });
+            });
+
             describe('should be overridden when "ignoreWhitespace" arg is set', function () {
                 check({
                     grammarSpec: {
@@ -874,7 +912,7 @@ describe('Parser', function () {
                     },
                     parser = new Parser(grammarSpec);
 
-                expect(parser.parse('detached;', {}, 'detached_statement')).to.deep.equal({
+                expect(parser.parse('detached', {}, 'detached_statement')).to.deep.equal({
                     name: 'detached_statement'
                 });
             });

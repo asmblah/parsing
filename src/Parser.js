@@ -480,11 +480,14 @@ _.extend(Parser.prototype, {
 
     parse: function (text, options, startRule) {
         var parser = this,
+            error,
             errorHandler = parser.getErrorHandler(),
             rule = startRule ?
                 parser.rules[startRule] :
                 parser.startRule,
-            match;
+            match,
+            matchEnd = 0,
+            whitespaceMatch;
 
         parser.clearMatchCache();
 
@@ -495,11 +498,43 @@ _.extend(Parser.prototype, {
 
         match = rule.match(text, 0, options);
 
-        if (errorHandler && (match === null || match.textLength < text.length)) {
-            errorHandler.handle(new ParseException('Parser.parse() :: Unexpected ' + (match ? '"' + text.charAt(match.textLength) + '"' : '$end'), text, parser.furthestMatch, parser.furthestMatchOffset, parser.furthestIgnoreMatch, parser.furthestIgnoreMatchOffset));
+        if (match) {
+            matchEnd = match.textOffset + match.textLength;
+
+            // Skip any trailing whitespace if the grammar specifies it
+            if (parser.ignoreRule) {
+                while (
+                    (whitespaceMatch = parser.ignoreRule.match(
+                        text,
+                        matchEnd,
+                        // Prevent infinite recursion of whitespace skipper
+                        {ignoreWhitespace: false})
+                    )
+                ) {
+                    matchEnd += whitespaceMatch.textLength;
+                }
+            }
         }
 
-        return match !== null ? match.components : null;
+        if (match === null || matchEnd < text.length) {
+            error = new ParseException(
+                'Parser.parse() :: Unexpected ' +
+                (match ? '"' + text.charAt(match.textOffset + match.textLength) + '"' : '$end'),
+                text,
+                parser.furthestMatch,
+                parser.furthestMatchOffset,
+                parser.furthestIgnoreMatch,
+                parser.furthestIgnoreMatchOffset
+            );
+
+            if (!errorHandler) {
+                throw error;
+            }
+
+            return errorHandler.handle(error);
+        }
+
+        return match.components;
     }
 });
 
