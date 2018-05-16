@@ -15,10 +15,10 @@ var _ = require('microdash'),
     getLineNumber = require('./getLineNumber'),
     undef;
 
-function Component(parser, matchCache, qualifierName, qualifier, arg, args, name, captureOffsetAs) {
+function Component(parser, matchCache, qualifierName, qualifier, arg, args, name, captureBoundsAs) {
     this.arg = arg;
     this.args = args;
-    this.captureOffsetAs = args.captureOffsetAs || captureOffsetAs;
+    this.captureBoundsAs = args.captureBoundsAs || captureBoundsAs;
     this.matchCache = matchCache;
     this.name = name;
     this.parser = parser;
@@ -28,7 +28,7 @@ function Component(parser, matchCache, qualifierName, qualifier, arg, args, name
 
 _.extend(Component.prototype, {
     getOffsetCaptureName: function () {
-        return this.captureOffsetAs;
+        return this.captureBoundsAs;
     },
 
     match: function (text, offset, options) {
@@ -64,7 +64,7 @@ _.extend(Component.prototype, {
             component.parser.logFurthestIgnoreMatch(subMatch, offset + subMatch.textOffset);
         }
 
-        if (component.name !== null || component.args.allowMerge === false || component.args.captureOffsetAs) {
+        if (component.name !== null || component.args.allowMerge === false || component.args.captureBoundsAs) {
             match = createSubMatch(text, subMatch, component, offset);
         } else {
             // Component is not named: merge its captures in if an array
@@ -111,12 +111,18 @@ function mergeCaptures(subMatch, component, text, offset) {
             }
         });
 
-        if (component.captureOffsetAs && subMatch.components.length > 1) {
-            match.components[component.captureOffsetAs] = {
-                length: subMatch.textLength,
-                line: getLineNumber(text, offset + subMatch.textOffset),
-                column: getColumnNumber(text, offset + subMatch.textOffset),
-                offset: offset + subMatch.textOffset
+        if (component.captureBoundsAs && subMatch.components.length > 1) {
+            match.components[component.captureBoundsAs] = {
+                start: {
+                    offset: offset + subMatch.textOffset,
+                    line: getLineNumber(text, offset + subMatch.textOffset),
+                    column: getColumnNumber(text, offset + subMatch.textOffset)
+                },
+                end: {
+                    offset: offset + subMatch.textOffset + subMatch.textLength,
+                    line: getLineNumber(text, offset + subMatch.textOffset + subMatch.textLength),
+                    column: getColumnNumber(text, offset + subMatch.textOffset + subMatch.textLength)
+                }
             };
         }
     }
@@ -145,13 +151,19 @@ function createSubMatch(text, subMatch, component, offset) {
         match.components[component.name] = subMatch.components;
     }
 
-    if (component.captureOffsetAs) {
+    if (component.captureBoundsAs) {
         (function (offset) {
-            match.components[component.captureOffsetAs] = {
-                length: subMatch.textLength,
-                line: getLineNumber(text, offset),
-                column: getColumnNumber(text, offset),
-                offset: offset
+            match.components[component.captureBoundsAs] = {
+                start: {
+                    offset: offset,
+                    line: getLineNumber(text, offset),
+                    column: getColumnNumber(text, offset)
+                },
+                end: {
+                    offset: offset + subMatch.textLength,
+                    line: getLineNumber(text, offset + subMatch.textLength),
+                    column: getColumnNumber(text, offset + subMatch.textLength)
+                }
             };
         }(offset + match.textOffset));
     }

@@ -401,8 +401,8 @@ function Parser(grammarSpec, stderr, options) {
                     arg,
                     args,
                     name,
-                    parser.options.captureAllOffsets ?
-                        grammarSpec.offsets || 'offset' :
+                    parser.options.captureAllBounds ?
+                        grammarSpec.bounds || 'bounds' :
                         null
                 );
             }

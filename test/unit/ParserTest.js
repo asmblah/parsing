@@ -604,7 +604,7 @@ describe('Parser', function () {
             });
         });
 
-        describe('"captureOffsetAs" arg', function () {
+        describe('"captureBoundsAs" arg', function () {
             var parser;
 
             _.each({
@@ -616,7 +616,7 @@ describe('Parser', function () {
                             'number': /\d(?:\.\d+)?/,
                             'whitespace': /\s+/,
                             'expression': {
-                                components: [{name: 'left', what: 'number'}, {name: 'operator', what: 'operator'}, {name: 'right', what: 'number', captureOffsetAs: 'capturedRightOffset'}]
+                                components: [{name: 'left', what: 'number'}, {name: 'operator', what: 'operator'}, {name: 'right', what: 'number', captureBoundsAs: 'capturedRightBounds'}]
                             }
                         },
                         start: 'expression'
@@ -627,15 +627,21 @@ describe('Parser', function () {
                         left: '1',
                         operator: '+',
                         right: '2',
-                        capturedRightOffset: {
-                            offset: 6,
-                            line: 3,
-                            column: 5,
-                            length: 1
+                        capturedRightBounds: {
+                            start: {
+                                offset: 6,
+                                line: 3,
+                                column: 5,
+                            },
+                            end: {
+                                offset: 7,
+                                line: 3,
+                                column: 6
+                            }
                         }
                     }
                 },
-                'when "what" arg text is not captured, only its offset': {
+                'when "what" arg text is not captured, only its bounds': {
                     grammarSpec: {
                         ignore: 'whitespace',
                         rules: {
@@ -643,7 +649,7 @@ describe('Parser', function () {
                             'number': /\d(?:\.\d+)?/,
                             'whitespace': /\s+/,
                             'expression': {
-                                components: [{name: 'left', what: 'number'}, {name: 'operator', what: 'operator'}, {what: 'number', captureOffsetAs: 'capturedRightOffset'}]
+                                components: [{name: 'left', what: 'number'}, {name: 'operator', what: 'operator'}, {what: 'number', captureBoundsAs: 'capturedRightBounds'}]
                             }
                         },
                         start: 'expression'
@@ -653,11 +659,17 @@ describe('Parser', function () {
                         name: 'expression',
                         left: '1',
                         operator: '+',
-                        capturedRightOffset: {
-                            offset: 6,
-                            line: 3,
-                            column: 5,
-                            length: 1
+                        capturedRightBounds: {
+                            start: {
+                                offset: 6,
+                                line: 3,
+                                column: 5,
+                            },
+                            end: {
+                                offset: 7,
+                                line: 3,
+                                column: 6
+                            }
                         }
                     }
                 },
@@ -669,7 +681,7 @@ describe('Parser', function () {
                             'number': /\d+(?:\.\d+)?/,
                             'whitespace': /\s+/,
                             'expression': {
-                                components: [{name: 'left', what: 'number'}, {name: 'operator', what: 'operator'}, {what: 'number', captureOffsetAs: 'capturedRightOffset'}]
+                                components: [{name: 'left', what: 'number'}, {name: 'operator', what: 'operator'}, {what: 'number', captureBoundsAs: 'capturedRightBounds'}]
                             }
                         },
                         start: 'expression'
@@ -679,11 +691,17 @@ describe('Parser', function () {
                         name: 'expression',
                         left: '126',
                         operator: '+',
-                        capturedRightOffset: {
-                            offset: 8,
-                            line: 3,
-                            column: 7,
-                            length: 5
+                        capturedRightBounds: {
+                            start: {
+                                offset: 8,
+                                line: 3,
+                                column: 7,
+                            },
+                            end: {
+                                offset: 13,
+                                line: 3,
+                                column: 12
+                            }
                         }
                     }
                 }
@@ -981,8 +999,8 @@ describe('Parser', function () {
             });
         });
 
-        describe('capture all offsets option', function () {
-            it('should support capturing an offset for every AST node', function () {
+        describe('capture all bounds option', function () {
+            it('should support capturing bounds for every AST node', function () {
                 var grammarSpec = {
                         ignore: 'whitespace',
                         rules: {
@@ -1010,7 +1028,7 @@ describe('Parser', function () {
                                 processor: function () {
                                     return {
                                         name: 'end_statement'
-                                        // Ensure `my_offset` is added to the resulting node,
+                                        // Ensure `my_bounds` is added to the resulting node,
                                         // even though this processor has ignored it
                                     };
                                 }
@@ -1027,17 +1045,18 @@ describe('Parser', function () {
                             }
                         },
                         start: 'program',
-                        offsets: 'my_offset'
+                        bounds: 'my_bounds'
                     },
                     options = {
-                        captureAllOffsets: true
+                        captureAllBounds: true
                     },
                     parser = new Parser(grammarSpec, null, options),
                     code = nowdoc(function () {/*<<<EOS
 go;
 
 
-  do_something_custom   open_it;
+  do_something_custom
+         open_it;
 
 
     end;
@@ -1049,11 +1068,17 @@ EOS
                     statements: [
                         {
                             name: 'go_statement',
-                            my_offset: {
-                                length: 3,
-                                line: 1,
-                                column: 1,
-                                offset: 0
+                            my_bounds: {
+                                start: {
+                                    offset: 0,
+                                    line: 1,
+                                    column: 1
+                                },
+                                end: {
+                                    offset: 3,
+                                    line: 1,
+                                    column: 4
+                                }
                             }
                         },
                         {
@@ -1061,35 +1086,59 @@ EOS
                             thing: {
                                 name: 'do_thing_arg',
                                 fallen_back_identifier: 'open_it',
-                                my_offset: {
-                                    length: 7,
-                                    line: 4,
-                                    column: 25,
-                                    offset: 30
+                                my_bounds: {
+                                    start: {
+                                        offset: 37,
+                                        line: 5,
+                                        column: 10
+                                    },
+                                    end: {
+                                        offset: 44,
+                                        line: 5,
+                                        column: 17
+                                    }
                                 }
                             },
-                            my_offset: {
-                                length: 30,
-                                line: 4,
-                                column: 3,
-                                offset: 8
+                            my_bounds: {
+                                start: {
+                                    offset: 8,
+                                    line: 4,
+                                    column: 3
+                                },
+                                end: {
+                                    offset: 45,
+                                    line: 5,
+                                    column: 18
+                                }
                             }
                         },
                         {
                             name: 'end_statement',
-                            my_offset: {
-                                length: 4,
-                                line: 7,
-                                column: 5,
-                                offset: 45
+                            my_bounds: {
+                                start: {
+                                    offset: 52,
+                                    line: 8,
+                                    column: 5
+                                },
+                                end: {
+                                    offset: 56,
+                                    line: 8,
+                                    column: 9
+                                }
                             }
                         }
                     ],
-                    my_offset: {
-                        length: 49,
-                        line: 1,
-                        column: 1,
-                        offset: 0
+                    my_bounds: {
+                        start: {
+                            offset: 0,
+                            line: 1,
+                            column: 1
+                        },
+                        end: {
+                            offset: 56,
+                            line: 8,
+                            column: 9
+                        }
                     }
                 });
             });
