@@ -28,12 +28,12 @@
     "microdash": "^1.0.0"
   },
   "devDependencies": {
-    "chai": "^2.3.0",
+    "chai": "^4.1.2",
     "jshint": "^2.9.5",
-    "mocha": "^2.2.5",
+    "mocha": "^5.1.1",
     "nowdoc": "^1.0.1",
-    "sinon": "^1.15.4",
-    "sinon-chai": "^2.14.0"
+    "sinon": "^5.0.7",
+    "sinon-chai": "^3.0.0"
   },
   "engines": {
     "node": ">=0.6"
