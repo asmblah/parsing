@@ -8,7 +8,7 @@
     "ast",
     "ll"
   ],
-  "homepage": "http://asmblah.github.com/parsing/",
+  "homepage": "https://github.com/asmblah/parsing",
   "author": "Dan Phillimore <dan@ovms.co> (http://ovms.co)",
   "repository": {
     "type": "git",
@@ -16,7 +16,7 @@
   },
   "bugs": {
     "email": "dan@ovms.co",
-    "url": "http://github.com/asmblah/parsing/issues"
+    "url": "https://github.com/asmblah/parsing/issues"
   },
   "main": "index",
   "scripts": {
