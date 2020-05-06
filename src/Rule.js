@@ -76,6 +76,9 @@ _.extend(Rule.prototype, {
         match = rule.component.match(text, offset, options);
 
         if (match === null) {
+            // Record the fact that this rule did _not_ match, so we don't attempt to match it again
+            rule.matchCache[offset] = null;
+
             return null;
         }
 

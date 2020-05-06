@@ -12,14 +12,12 @@
 var _ = require('microdash'),
     copy = require('./copy'),
     getColumnNumber = require('./getColumnNumber'),
-    getLineNumber = require('./getLineNumber'),
-    undef;
+    getLineNumber = require('./getLineNumber');
 
-function Component(parser, matchCache, qualifierName, qualifier, arg, args, name, captureBoundsAs) {
+function Component(parser, qualifierName, qualifier, arg, args, name, captureBoundsAs) {
     this.arg = arg;
     this.args = args;
     this.captureBoundsAs = args.captureBoundsAs || captureBoundsAs;
-    this.matchCache = matchCache;
     this.name = name;
     this.parser = parser;
     this.qualifier = qualifier;
@@ -33,12 +31,8 @@ _.extend(Component.prototype, {
 
     match: function (text, offset, options) {
         var component = this,
-            match = component.matchCache[offset],
+            match,
             subMatch;
-
-        if (match !== undef) {
-            return match;
-        }
 
         // Cascade ignoreWhitespace down to descendants of this component
         if (component.args.ignoreWhitespace === false) {
@@ -54,7 +48,6 @@ _.extend(Component.prototype, {
         subMatch = component.qualifier(text, offset, component.arg, component.args, options);
 
         if (subMatch === null) {
-            component.matchCache[offset] = null;
             return null;
         }
 
@@ -74,8 +67,6 @@ _.extend(Component.prototype, {
                 match = subMatch;
             }
         }
-
-        component.matchCache[offset] = match;
 
         return match;
     }
