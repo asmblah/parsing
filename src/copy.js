@@ -21,4 +21,5 @@ function copy(to, from) {
     }
 }
 
-module.exports = copy;
+// Use native Object.assign(...) if available for speed
+module.exports = Object.assign || copy;

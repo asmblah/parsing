@@ -25,7 +25,15 @@ var _ = require('microdash'),
  * @param {Object|null} options
  * @constructor
  */
-function Rule(parser, matchCache, name, captureName, ifNoMatch, processor, options) {
+function Rule(
+    parser,
+    matchCache,
+    name,
+    captureName,
+    ifNoMatch,
+    processor,
+    options
+) {
     /**
      * @type {string|null}
      */
@@ -61,7 +69,17 @@ function Rule(parser, matchCache, name, captureName, ifNoMatch, processor, optio
 }
 
 _.extend(Rule.prototype, {
-    match: function (text, offset, options) {
+    /**
+     * Attempts to match this rule at the given offset into the string
+     *
+     * @param {string} text
+     * @param {number} offset 0-based absolute offset into the string to match at
+     * @param {number} line 0-based number of the current line
+     * @param {number} lineOffset 0-based absolute offset of the start of the current line
+     * @param {Object} options
+     * @return {Object|null}
+     */
+    match: function (text, offset, line, lineOffset, options) {
         var capturedOffset,
             component,
             rule = this,
@@ -73,9 +91,12 @@ _.extend(Rule.prototype, {
 
         options = options || {};
 
-        match = rule.component.match(text, offset, options);
+        match = rule.component.match(text, offset, line, lineOffset, options);
 
         if (match === null) {
+            // Record the fact that this rule did _not_ match, so we don't attempt to match it again
+            rule.matchCache[offset] = null;
+
             return null;
         }
 
@@ -86,6 +107,11 @@ _.extend(Rule.prototype, {
         if (rule.ifNoMatch && (!(component = match.components[rule.ifNoMatch.component]) || component.length === 0)) {
             match = {
                 components: match.components[rule.ifNoMatch.capture],
+                firstLine: match.firstLine,
+                firstLineOffset: match.firstLineOffset,
+                lines: match.lines,
+                lastLine: match.lastLine,
+                lastLineOffset: match.lastLineOffset,
                 textOffset: match.textOffset,
                 textLength: match.textLength
             };
@@ -120,6 +146,13 @@ _.extend(Rule.prototype, {
         return match;
     },
 
+    /**
+     * Sets the root component of this rule
+     * (must be done via a setter to solve the circular dependency issue
+     * when rules in the grammar are recursive)
+     *
+     * @param {Component} component
+     */
     setComponent: function (component) {
         this.component = component;
     }
