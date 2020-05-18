@@ -1000,7 +1000,7 @@ describe('Parser', function () {
         });
 
         describe('capture all bounds option', function () {
-            it('should support capturing bounds for every AST node', function () {
+            it('should support capturing bounds for every AST node with a complex grammar', function () {
                 var grammarSpec = {
                         ignore: 'whitespace',
                         rules: {

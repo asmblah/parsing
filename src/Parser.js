@@ -10,6 +10,8 @@
 'use strict';
 
 var _ = require('microdash'),
+    countNewlines = require('./countNewlines'),
+    findLastNewlineFrom = require('./findLastNewlineFrom'),
     hasOwn = {}.hasOwnProperty,
     Component = require('./Component'),
     Exception = require('./Exception/Exception'),
@@ -43,50 +45,84 @@ function Parser(grammarSpec, stderr, options) {
 
         // Speed up repeated match tests in complex grammars by caching component matches
         function createMatchCache() {
-            var matchCache = {};
+            // Use an array for the match caches, as it can be cleared easily by just zeroing .length
+            // and the indexes into the cache are numeric anyway (input string offsets)
+            var matchCache = [];
             parser.matchCaches.push(matchCache);
             return matchCache;
         }
 
         var qualifiers = {
                 // Like "(...)" grouping - 'arg' is an array of components that must all match
-                'allOf': function (text, offset, arg, args, options) {
-                    var matches = [],
+                'allOf': function (text, offset, line, lineOffset, arg, args, options) {
+                    var firstLine = null,
+                        firstLineOffset = null,
+                        lines = 0,
+                        lastLineOffset = lineOffset,
+                        matches = [],
                         textLength = 0,
                         textOffset = null;
 
                     _.each(arg, function (component) {
-                        var componentMatch = component.match(text, offset + (textOffset || 0) + textLength, options);
+                        var componentMatch = component.match(
+                            text,
+                            offset + (textOffset || 0) + textLength,
+                            line + lines,
+                            lastLineOffset,
+                            options
+                        );
 
                         if (componentMatch === null) {
                             matches = null;
                             return false;
                         }
 
-                        textLength += componentMatch.textLength;
                         matches.push(componentMatch.components);
 
+                        if (componentMatch.isEmpty) {
+                            // Empty matches are possible when an "optionally" qualifier is used,
+                            // which must be treated specially as they should not fail the parent match
+                            return;
+                        }
+
+                        if (firstLine === null) {
+                            firstLine = componentMatch.firstLine;
+                            firstLineOffset = componentMatch.firstLineOffset;
+                        }
+
+                        lines += componentMatch.lines;
+                        lastLineOffset = componentMatch.lastLineOffset;
+                        textLength += componentMatch.textLength;
+
                         if (textOffset === null) {
-                            if (!componentMatch.isEmpty) {
-                                textOffset = componentMatch.textOffset;
-                            }
+                            textOffset = componentMatch.textOffset;
                         } else {
                             textLength += componentMatch.textOffset;
                         }
                     });
 
+                    if (firstLine === null) {
+                        firstLine = 0;
+                        firstLineOffset = 0;
+                    }
+
                     return matches ? {
                         components: matches,
+                        firstLine: firstLine,
+                        firstLineOffset: firstLineOffset,
+                        lines: lines,
+                        lastLine: line + lines,
+                        lastLineOffset: lastLineOffset,
                         textLength: textLength,
                         textOffset: textOffset || 0
                     } : null;
                 },
                 // Like "|" (alternation) - 'arg' is an array of components, one of which must match
-                'oneOf': function (text, offset, arg, args, options) {
+                'oneOf': function (text, offset, line, lineOffset, arg, args, options) {
                     var match = null;
 
                     _.each(arg, function (component) {
-                        var componentMatch = component.match(text, offset, options);
+                        var componentMatch = component.match(text, offset, line, lineOffset, options);
 
                         if (componentMatch !== null) {
                             match = componentMatch;
@@ -96,16 +132,37 @@ function Parser(grammarSpec, stderr, options) {
 
                     return match;
                 },
-                // Like "+" - 'arg' is an array of components, one or more of which must match consecutively
-                'oneOrMoreOf': function (text, offset, arg, args, options) {
+                // Like "+" - 'arg' is a component, which must match one or more times consecutively
+                'oneOrMoreOf': function (text, offset, line, lineOffset, arg, args, options) {
                     var componentMatch,
+                        firstLine = null,
+                        firstLineOffset = null,
+                        lines = 0,
+                        lastLineOffset = lineOffset,
                         matches = [],
                         textLength = 0,
                         textOffset = null;
 
-                    while ((componentMatch = arg.match(text, offset + (textOffset || 0) + textLength, options)) !== null) {
+                    while (
+                        (
+                            componentMatch = arg.match(
+                                text,
+                                offset + (textOffset || 0) + textLength,
+                                line + lines,
+                                lastLineOffset,
+                                options
+                            )
+                        ) !== null
+                    ) {
+                        lines += componentMatch.lines;
+                        lastLineOffset = componentMatch.lastLineOffset;
                         textLength += componentMatch.textLength;
                         matches.push(componentMatch.components);
+
+                        if (firstLine === null) {
+                            firstLine = componentMatch.firstLine;
+                            firstLineOffset = componentMatch.firstLineOffset;
+                        }
 
                         if (textOffset === null) {
                             textOffset = componentMatch.textOffset;
@@ -114,20 +171,35 @@ function Parser(grammarSpec, stderr, options) {
                         }
                     }
 
+                    if (firstLine === null) {
+                        firstLine = 0;
+                        firstLineOffset = 0;
+                    }
+
                     return matches.length > 0 ? {
                         components: matches,
+                        firstLine: firstLine,
+                        firstLineOffset: firstLineOffset,
+                        lines: lines,
+                        lastLine: line + lines,
+                        lastLineOffset: lastLineOffset,
                         textLength: textLength,
                         textOffset: textOffset || 0
                     } : null;
                 },
                 // Like "?" - 'arg' is a component which may or may not match
-                'optionally': function (text, offset, arg, args, options) {
-                    var match = arg.match(text, offset, options);
+                'optionally': function (text, offset, line, lineOffset, arg, args, options) {
+                    var match = arg.match(text, offset, line, lineOffset, options);
 
                     if (match) {
                         if (args.wrapInArray) {
                             return {
                                 components: [match.components],
+                                firstLine: match.firstLine,
+                                firstLineOffset: match.firstLineOffset,
+                                lines: match.lines,
+                                lastLine: match.lastLine,
+                                lastLineOffset: match.lastLineOffset,
                                 textLength: match.textLength,
                                 textOffset: match.textOffset
                             };
@@ -139,14 +211,19 @@ function Parser(grammarSpec, stderr, options) {
                     return {
                         isEmpty: true,
                         components: args.wrapInArray ? [] : '',
+                        firstLine: line,
+                        firstLineOffset: lineOffset,
+                        lines: 0,
+                        lastLine: line,
+                        lastLineOffset: lineOffset,
                         textLength: 0,
                         textOffset: 0
                     };
                 },
                 // Refers to another rule
-                'rule': function (text, offset, arg, args, options) {
+                'rule': function (text, offset, line, lineOffset, arg, args, options) {
                     var expectedText = hasOwn.call(args, 'text') ? args.text : null,
-                        match = arg.match(text, offset, options);
+                        match = arg.match(text, offset, line, lineOffset, options);
 
                     if (match === null) {
                         return null;
@@ -154,17 +231,34 @@ function Parser(grammarSpec, stderr, options) {
 
                     return (expectedText === null || text.substr(offset + match.textOffset, match.textLength) === expectedText) ? match : null;
                 },
-                'what': function (text, offset, arg, args, options) {
+                // Matches a regex, constant string, another rule or calls a callback for a dynamic match
+                'what': function (text, offset, line, lineOffset, arg, args, options) {
                     var captureIndex,
+                        lines,
                         match,
                         result,
-                        whitespaceLength = 0;
+                        whitespaceLength = 0,
+                        whitespaceLines = 0,
+                        whitespaceLastLineOffset = lineOffset;
 
                     function skipWhitespace() {
                         var match;
+
                         if (parser.ignoreRule && options.ignoreWhitespace !== false && args.ignoreWhitespace !== false) {
                             // Prevent infinite recursion of whitespace skipper
-                            while ((match = parser.ignoreRule.match(text, offset + whitespaceLength, {ignoreWhitespace: false}))) {
+                            while (
+                                (
+                                    match = parser.ignoreRule.match(
+                                        text,
+                                        offset + whitespaceLength,
+                                        line + whitespaceLines,
+                                        whitespaceLastLineOffset,
+                                        {ignoreWhitespace: false}
+                                    )
+                                )
+                            ) {
+                                whitespaceLines += match.lines;
+                                whitespaceLastLineOffset = match.lastLineOffset;
                                 whitespaceLength += match.textLength;
                             }
                         }
@@ -184,8 +278,17 @@ function Parser(grammarSpec, stderr, options) {
                         skipWhitespace();
 
                         if (text.substr(offset + whitespaceLength, arg.length) === arg) {
+                            lines = countNewlines(arg);
+
                             return {
                                 components: arg,
+                                // First line should be the first line _after_ any skipped leading whitespace
+                                firstLine: line + whitespaceLines,
+                                firstLineOffset: whitespaceLastLineOffset,
+                                // Lines should be the total no. of lines _including_ whitespace
+                                lines: whitespaceLines + lines,
+                                lastLine: line + whitespaceLines + lines,
+                                lastLineOffset: findLastNewlineFrom(text, offset + whitespaceLength + arg.length - 1),
                                 textLength: arg.length,
                                 textOffset: whitespaceLength
                             };
@@ -193,19 +296,34 @@ function Parser(grammarSpec, stderr, options) {
                     } else if (arg instanceof RegExp) {
                         skipWhitespace();
 
+                        // TODO: Optimise so we dont need to do this substr -
+                        //       perhaps use regex sticky flag and set .lastIndexOf where supported?
                         match = text.substr(offset + whitespaceLength).match(arg);
 
                         if (match) {
                             captureIndex = args.captureIndex || 0;
+                            lines = countNewlines(match[0]);
+
                             return {
                                 components: replace(match[captureIndex]),
+
+                                // First line should be the first line _after_ any skipped leading whitespace
+                                firstLine: line + whitespaceLines,
+                                firstLineOffset: whitespaceLastLineOffset,
+                                // Lines should be the total no. of lines _including_ whitespace
+                                lines: whitespaceLines + lines,
+                                lastLine: line + whitespaceLines + lines,
+                                // NB: All regexes are anchored, so we can rely on the last newline position
+                                //     in the matched substring like this
+                                lastLineOffset: findLastNewlineFrom(text, offset + whitespaceLength + match[0].length - 1),
+
                                 // Always return the entire match length even though we may have only captured part of it
                                 textLength: match[0].length,
                                 textOffset: whitespaceLength
                             };
                         }
                     } else if (arg instanceof Component) {
-                        result = arg.match(text, offset, options);
+                        result = arg.match(text, offset, line, lineOffset, options);
 
                         if (_.isString(result)) {
                             result = replace(result);
@@ -215,9 +333,18 @@ function Parser(grammarSpec, stderr, options) {
 
                         return result;
                     } else if (_.isFunction(arg)) {
+                        // Used by eg. the special <BOF> and <EOF> rules
                         skipWhitespace();
 
-                        return arg(text, offset, whitespaceLength, options);
+                        return arg(
+                            text,
+                            offset,
+                            whitespaceLength,
+                            whitespaceLines,
+                            line + whitespaceLines,
+                            whitespaceLastLineOffset,
+                            options
+                        );
                     } else {
                         throw new Exception('Parser "what" qualifier :: Invalid argument "' + arg + '"');
                     }
@@ -225,15 +352,36 @@ function Parser(grammarSpec, stderr, options) {
                     return null;
                 },
                 // Like "*"
-                'zeroOrMoreOf': function (text, offset, arg, args, options) {
+                'zeroOrMoreOf': function (text, offset, line, lineOffset, arg, args, options) {
                     var componentMatch,
+                        firstLine = null,
+                        firstLineOffset = null,
+                        lines = 0,
+                        lastLineOffset = lineOffset,
                         matches = [],
                         textLength = 0,
                         textOffset = null;
 
-                    while ((componentMatch = arg.match(text, offset + (textOffset || 0) + textLength, options))) {
+                    while (
+                        (
+                            componentMatch = arg.match(
+                                text,
+                                offset + (textOffset || 0) + textLength,
+                                line + lines,
+                                lastLineOffset,
+                                options
+                            )
+                        ) !== null
+                    ) {
+                        lines += componentMatch.lines;
+                        lastLineOffset = componentMatch.lastLineOffset;
                         textLength += componentMatch.textLength;
                         matches.push(componentMatch.components);
+
+                        if (firstLine === null) {
+                            firstLine = componentMatch.firstLine;
+                            firstLineOffset = componentMatch.firstLineOffset;
+                        }
 
                         if (textOffset === null) {
                             textOffset = componentMatch.textOffset;
@@ -242,8 +390,18 @@ function Parser(grammarSpec, stderr, options) {
                         }
                     }
 
+                    if (firstLine === null) {
+                        firstLine = 0;
+                        firstLineOffset = 0;
+                    }
+
                     return {
                         components: matches,
+                        firstLine: firstLine,
+                        firstLineOffset: firstLineOffset,
+                        lines: lines,
+                        lastLine: line + lines,
+                        lastLineOffset: lastLineOffset,
                         textLength: textLength,
                         textOffset: textOffset || 0
                     };
@@ -254,9 +412,25 @@ function Parser(grammarSpec, stderr, options) {
 
         // Special BeginningOfFile rule
         rules['<BOF>'] = new Rule(parser, createMatchCache(), '<BOF>', null, null);
-        rules['<BOF>'].setComponent(new Component(parser, 'what', qualifiers.what, function (text, offset, textOffset) {
+        rules['<BOF>'].setComponent(new Component(parser, 'what', qualifiers.what, function (
+            text,
+            offset,
+            textOffset,
+            textOffsetLines,
+            firstLine,
+            firstLineOffset
+        ) {
             return offset === 0 ? {
                 components: '',
+
+                // First line should be the first line _after_ any skipped leading whitespace
+                firstLine: firstLine,
+                firstLineOffset: firstLineOffset,
+                // Lines should be the total no. of lines _including_ whitespace
+                lines: textOffsetLines,
+                lastLine: firstLine,
+                lastLineOffset: findLastNewlineFrom(text, offset + textOffset),
+
                 textLength: 0,
                 textOffset: textOffset
             } : null;
@@ -264,9 +438,25 @@ function Parser(grammarSpec, stderr, options) {
 
         // Special EndOfFile rule
         rules['<EOF>'] = new Rule(parser, createMatchCache(), '<EOF>', null, null);
-        rules['<EOF>'].setComponent(new Component(parser, 'what', qualifiers.what, function (text, offset, textOffset) {
+        rules['<EOF>'].setComponent(new Component(parser, 'what', qualifiers.what, function (
+            text,
+            offset,
+            textOffset,
+            textOffsetLines,
+            firstLine,
+            firstLineOffset
+        ) {
             return offset + textOffset === text.length ? {
                 components: '',
+
+                // First line should be the first line _after_ any skipped leading whitespace
+                firstLine: firstLine,
+                firstLineOffset: firstLineOffset,
+                // Lines should be the total no. of lines _including_ whitespace
+                lines: textOffsetLines,
+                lastLine: firstLine,
+                lastLineOffset: findLastNewlineFrom(text, offset + textOffset),
+
                 textLength: 0,
                 textOffset: textOffset
             } : null;
@@ -431,11 +621,12 @@ function Parser(grammarSpec, stderr, options) {
 }
 
 _.extend(Parser.prototype, {
+    /**
+     * Clears the match cache for all rules of the loaded grammar
+     */
     clearMatchCache: function () {
         _.each(this.matchCaches, function (matchCache) {
-            _.each(matchCache, function (value, name) {
-                delete matchCache[name];
-            });
+            matchCache.length = 0;
         });
     },
 
@@ -477,6 +668,14 @@ _.extend(Parser.prototype, {
         }
     },
 
+    /**
+     * Parses the given input text using the loaded grammar, optionally from a given start/entry rule
+     *
+     * @param {string} text
+     * @param {Object} options
+     * @param {string=} startRule
+     * @return {Object}
+     */
     parse: function (text, options, startRule) {
         var parser = this,
             error,
@@ -486,6 +685,8 @@ _.extend(Parser.prototype, {
                 parser.startRule,
             match,
             matchEnd = 0,
+            matchLine,
+            matchLastLineOffset,
             whitespaceMatch;
 
         parser.clearMatchCache();
@@ -495,9 +696,11 @@ _.extend(Parser.prototype, {
         parser.furthestMatch = null;
         parser.furthestMatchOffset = -1;
 
-        match = rule.match(text, 0, options);
+        match = rule.match(text, 0, 0, 0, options);
 
         if (match) {
+            matchLine = match.lines;
+            matchLastLineOffset = match.textOffset + match.lastLineOffset;
             matchEnd = match.textOffset + match.textLength;
 
             // Skip any trailing whitespace if the grammar specifies it
@@ -506,19 +709,25 @@ _.extend(Parser.prototype, {
                     (whitespaceMatch = parser.ignoreRule.match(
                         text,
                         matchEnd,
+                        matchLine,
+                        matchLastLineOffset,
                         // Prevent infinite recursion of whitespace skipper
                         {ignoreWhitespace: false})
                     )
                 ) {
-                    matchEnd += whitespaceMatch.textLength;
+                    matchLine += whitespaceMatch.lines;
+                    matchLastLineOffset += match.lastLineOffset;
+                    matchEnd += whitespaceMatch.textOffset + whitespaceMatch.textLength;
                 }
             }
         }
 
         if (match === null || matchEnd < text.length) {
+            matchEnd = match ? match.textOffset + match.textLength : 0;
+
             error = new ParseException(
                 'Parser.parse() :: Unexpected ' +
-                (match ? '"' + text.charAt(match.textOffset + match.textLength) + '"' : '$end'),
+                (matchEnd === text.length - 1 ? '$end' : '"' + text.charAt(matchEnd) + '"'),
                 text,
                 parser.furthestMatch,
                 parser.furthestMatchOffset,
