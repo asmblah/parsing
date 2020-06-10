@@ -25,7 +25,9 @@ describe('Parser "rule" qualifier', function () {
                             // Explicitly use a "rule" qualifier
                             {name: 'first_capture', rule: 'my_other_rule'},
                             // Implicitly use a "rule" qualifier via the generic "what" qualifier
-                            {name: 'second_capture', what: 'my_other_rule'}
+                            {name: 'second_capture', what: 'my_other_rule'},
+                            // Implicitly use a "rule" qualifier where it must also make a text match
+                            {name: 'third_capture', what: {'my_other_rule': 'my\n\n clobber'}}
                         ]
                     },
                     'whitespace': /\s+/,
@@ -37,7 +39,7 @@ describe('Parser "rule" qualifier', function () {
                 captureAllBounds: true
             },
             parser = new Parser(grammarSpec, null, options),
-            code = '   my\n\n stuff my\n\n things  ';
+            code = '   my\n\n stuff my\n\n things my\n\n clobber ';
 
         expect(parser.parse(code)).to.deep.equal({
             name: 'my_rule',
@@ -75,6 +77,23 @@ describe('Parser "rule" qualifier', function () {
                     }
                 }
             },
+            third_capture: {
+                name: 'my_other_rule',
+                my_text: 'my\n\n clobber',
+
+                my_bounds: {
+                    start: {
+                        offset: 26,
+                        line: 5,
+                        column: 9
+                    },
+                    end: {
+                        offset: 38,
+                        line: 7,
+                        column: 9
+                    }
+                }
+            },
             my_bounds: {
                 start: {
                     offset: 3,
@@ -82,9 +101,9 @@ describe('Parser "rule" qualifier', function () {
                     column: 4
                 },
                 end: {
-                    offset: 25,
-                    line: 5,
-                    column: 8
+                    offset: 38,
+                    line: 7,
+                    column: 9
                 }
             }
         });
