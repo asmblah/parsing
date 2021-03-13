@@ -11,7 +11,9 @@
 
 var _ = require('microdash'),
     copy = require('./copy'),
-    undef;
+    undef,
+    FailureException = require('./Exception/Failure'),
+    ParseException = require('./Exception/Parse');
 
 /**
  * Represents a single rule in the grammar
@@ -134,6 +136,26 @@ _.extend(Rule.prototype, {
                 rule.parser.clearMatchCache();
 
                 return reentrantMatch;
+            }, function fail(message, context) {
+                var errorHandler = rule.parser.getErrorHandler(),
+                    error = new ParseException(
+                        message,
+                        text,
+                        rule.parser.getFurthestMatchEnd(),
+                        context
+                    ),
+                    result;
+
+                if (!errorHandler) {
+                    throw error;
+                }
+
+                result = errorHandler.handle(error);
+
+                // Most ErrorHandlers are expected to throw, but if a result is returned instead
+                // we throw this special Exception, which will be caught at the top level
+                // and ensure that this result is returned from Parser.parse() instead
+                throw new FailureException(message, result);
             });
 
             if (rule.component.getOffsetCaptureName()) {

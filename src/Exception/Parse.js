@@ -19,38 +19,26 @@ var _ = require('microdash'),
  *
  * @param {string} message The error message
  * @param {string} text The original text string being parsed
- * @param {Object|null} furthestMatch
- * @param {number} furthestMatchOffset
- * @param {Object|null} furthestIgnoreMatch
- * @param {number} furthestIgnoreMatchOffset
+ * @param {number} furthestMatchEnd
+ * @param {Object} context
  * @constructor
  */
 function ParseException(
     message,
     text,
-    furthestMatch,
-    furthestMatchOffset,
-    furthestIgnoreMatch,
-    furthestIgnoreMatchOffset
+    furthestMatchEnd,
+    context
 ) {
     Exception.call(this, message);
 
     /**
-     * @type {Object|null}
+     * @type {Object}
      */
-    this.furthestIgnoreMatch = furthestIgnoreMatch;
+    this.context = context;
     /**
      * @type {number}
      */
-    this.furthestIgnoreMatchOffset = furthestIgnoreMatchOffset;
-    /**
-     * @type {Object|null}
-     */
-    this.furthestMatch = furthestMatch;
-    /**
-     * @type {number}
-     */
-    this.furthestMatchOffset = furthestMatchOffset;
+    this.furthestMatchEnd = furthestMatchEnd;
     /**
      * @type {string}
      */
@@ -61,18 +49,21 @@ util.inherits(ParseException, Exception);
 
 _.extend(ParseException.prototype, {
     /**
+     * Returns the context of the failure
+     *
+     * @returns {Object}
+     */
+    getContext: function () {
+        return this.context;
+    },
+
+    /**
      * Fetches the furthest 0-based absolute offset that the parse reached before terminating
      *
      * @return {number}
      */
     getFurthestMatchEnd: function () {
-        var exception = this;
-
-        if (exception.furthestIgnoreMatchOffset > exception.furthestMatchOffset) {
-            return exception.furthestIgnoreMatchOffset + exception.furthestIgnoreMatch.textLength;
-        }
-
-        return exception.furthestMatchOffset + (exception.furthestMatch ? exception.furthestMatch.textLength : 0);
+        return this.furthestMatchEnd;
     },
 
     /**
@@ -83,7 +74,9 @@ _.extend(ParseException.prototype, {
     getLineNumber: function () {
         var exception = this;
 
-        return getLineNumber(exception.text, exception.getFurthestMatchEnd());
+        return exception.furthestMatchEnd === -1 ?
+            -1 :
+            getLineNumber(exception.text, exception.furthestMatchEnd);
     },
 
     /**
@@ -104,7 +97,7 @@ _.extend(ParseException.prototype, {
     unexpectedEndOfInput: function () {
         var exception = this;
 
-        return exception.getFurthestMatchEnd() === exception.text.length;
+        return exception.furthestMatchEnd === exception.text.length;
     }
 });
 

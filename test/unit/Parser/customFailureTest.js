@@ -13,7 +13,7 @@ var expect = require('chai').expect,
     ParseException = require('../../../src/Exception/Parse'),
     Parser = require('../../../src/Parser');
 
-describe('Parser partial match failures', function () {
+describe('Parser custom failures', function () {
     it('should throw a ParseException when there is no custom ErrorHandler specified', function () {
         var caughtError,
             grammarSpec = {
@@ -25,7 +25,10 @@ describe('Parser partial match failures', function () {
                         }
                     },
                     'my_first_statement': {
-                        components: [{name: 'text', what: /first/}]
+                        components: [{name: 'text', what: /first/}],
+                        processor: function (node, parse, fail) {
+                            fail('My failure message', {my: 'context'});
+                        }
                     },
                     'my_second_statement': {
                         components: [{name: 'text', what: /second/}]
@@ -45,9 +48,12 @@ describe('Parser partial match failures', function () {
         }
 
         expect(caughtError).to.be.an.instanceOf(ParseException);
-        expect(caughtError.getMessage()).to.equal('Parser.parse() :: Unexpected "b"');
-        expect(caughtError.getFurthestMatchEnd()).to.equal(8);
-        expect(caughtError.getLineNumber()).to.equal(3);
+        expect(caughtError.getMessage()).to.equal('My failure message');
+        expect(caughtError.getContext()).to.deep.equal({my: 'context'});
+        // Note that the whitespace after the match was not consumed, as the failure
+        // was explicitly raised in the processor callback
+        expect(caughtError.getFurthestMatchEnd()).to.equal(5);
+        expect(caughtError.getLineNumber()).to.equal(1);
         expect(caughtError.getText()).to.equal(code);
         expect(caughtError.unexpectedEndOfInput()).to.be.false;
     });
@@ -94,7 +100,10 @@ describe('Parser partial match failures', function () {
                         }
                     },
                     'my_first_statement': {
-                        components: [{name: 'text', what: /first/}]
+                        components: [{name: 'text', what: /first/}],
+                        processor: function (node, parse, fail) {
+                            fail('My failure message', {my: 'context'});
+                        }
                     },
                     'my_second_statement': {
                         components: [{name: 'text', what: /second/}]
@@ -114,9 +123,12 @@ describe('Parser partial match failures', function () {
         expect(result.myValue).to.equal(21);
         expect(result.stderr).to.equal(stderr);
         expect(result.parseException).to.be.an.instanceOf(ParseException);
-        expect(result.parseException.getMessage()).to.equal('Parser.parse() :: Unexpected "b"');
-        expect(result.parseException.getFurthestMatchEnd()).to.equal(8);
-        expect(result.parseException.getLineNumber()).to.equal(3);
+        expect(result.parseException.getMessage()).to.equal('My failure message');
+        expect(result.parseException.getContext()).to.deep.equal({my: 'context'});
+        // Note that the whitespace after the match was not consumed, as the failure
+        // was explicitly raised in the processor callback
+        expect(result.parseException.getFurthestMatchEnd()).to.equal(5);
+        expect(result.parseException.getLineNumber()).to.equal(1);
         expect(result.parseException.getText()).to.equal(code);
         expect(result.parseException.unexpectedEndOfInput()).to.be.false;
     });

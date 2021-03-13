@@ -15,6 +15,7 @@ var _ = require('microdash'),
     hasOwn = {}.hasOwnProperty,
     Component = require('./Component'),
     Exception = require('./Exception/Exception'),
+    FailureException = require('./Exception/Failure'),
     ParseException = require('./Exception/Parse'),
     Rule = require('./Rule');
 
@@ -640,6 +641,22 @@ _.extend(Parser.prototype, {
         return parser.errorHandler;
     },
 
+    /**
+     * Fetches the 0-based offset into the input string at the end
+     * of the furthest match into the string
+     *
+     * @returns {number}
+     */
+    getFurthestMatchEnd: function () {
+        var parser = this;
+
+        if (parser.furthestIgnoreMatchOffset > parser.furthestMatchOffset) {
+            return parser.furthestIgnoreMatchOffset + parser.furthestIgnoreMatch.textLength;
+        }
+
+        return parser.furthestMatchOffset + (parser.furthestMatch ? parser.furthestMatch.textLength : 0);
+    },
+
     getState: function () {
         var parser = this;
 
@@ -680,6 +697,7 @@ _.extend(Parser.prototype, {
         var parser = this,
             error,
             errorHandler = parser.getErrorHandler(),
+            furthestMatchEnd,
             rule = startRule ?
                 parser.rules[startRule] :
                 parser.startRule,
@@ -687,6 +705,7 @@ _.extend(Parser.prototype, {
             matchEnd = 0,
             matchLine,
             matchLastLineOffset,
+            message,
             whitespaceMatch;
 
         parser.clearMatchCache();
@@ -696,43 +715,58 @@ _.extend(Parser.prototype, {
         parser.furthestMatch = null;
         parser.furthestMatchOffset = -1;
 
-        match = rule.match(text, 0, 0, 0, options);
+        try {
+            match = rule.match(text, 0, 0, 0, options);
 
-        if (match) {
-            matchLine = match.lines;
-            matchLastLineOffset = match.textOffset + match.lastLineOffset;
-            matchEnd = match.textOffset + match.textLength;
+            if (match) {
+                matchLine = match.lines;
+                matchLastLineOffset = match.textOffset + match.lastLineOffset;
+                matchEnd = match.textOffset + match.textLength;
 
-            // Skip any trailing whitespace if the grammar specifies it
-            if (parser.ignoreRule) {
-                while (
-                    (whitespaceMatch = parser.ignoreRule.match(
-                        text,
-                        matchEnd,
-                        matchLine,
-                        matchLastLineOffset,
-                        // Prevent infinite recursion of whitespace skipper
-                        {ignoreWhitespace: false})
-                    )
-                ) {
-                    matchLine += whitespaceMatch.lines;
-                    matchLastLineOffset += match.lastLineOffset;
-                    matchEnd += whitespaceMatch.textOffset + whitespaceMatch.textLength;
+                // Skip any trailing whitespace if the grammar specifies it
+                if (parser.ignoreRule) {
+                    while (
+                        (whitespaceMatch = parser.ignoreRule.match(
+                            text,
+                            matchEnd,
+                            matchLine,
+                            matchLastLineOffset,
+                            // Prevent infinite recursion of whitespace skipper
+                            {ignoreWhitespace: false})
+                        )
+                    ) {
+                        matchLine += whitespaceMatch.lines;
+                        matchLastLineOffset += match.lastLineOffset;
+                        matchEnd += whitespaceMatch.textOffset + whitespaceMatch.textLength;
+                    }
                 }
             }
+        } catch (error) {
+            if (!(error instanceof FailureException)) {
+                throw error;
+            }
+
+            // The custom ErrorHandler returned a result rather than throwing, so return it from here
+            return error.getResult();
         }
 
         if (match === null || matchEnd < text.length) {
-            matchEnd = match ? match.textOffset + match.textLength : 0;
+            // Determine the furthest offset the parser managed to parse to
+            furthestMatchEnd = parser.getFurthestMatchEnd();
+
+            if (furthestMatchEnd === -1) {
+                message = 'No match';
+            } else if (furthestMatchEnd === text.length) {
+                message = 'Unexpected end of file';
+            } else {
+                message = 'Unexpected "' + text.charAt(furthestMatchEnd) + '"';
+            }
 
             error = new ParseException(
-                'Parser.parse() :: Unexpected ' +
-                (matchEnd === text.length - 1 ? '$end' : '"' + text.charAt(matchEnd) + '"'),
+                'Parser.parse() :: ' + message,
                 text,
-                parser.furthestMatch,
-                parser.furthestMatchOffset,
-                parser.furthestIgnoreMatch,
-                parser.furthestIgnoreMatchOffset
+                furthestMatchEnd,
+                {}
             );
 
             if (!errorHandler) {
