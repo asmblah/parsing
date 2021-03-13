@@ -70,7 +70,7 @@ describe('Parser "oneOrMoreOf" qualifier', function () {
         try {
             parser.parse(code);
         } catch (error) {
-            expect(error.message).to.equal('Parser.parse() :: Unexpected "y"');
+            expect(error.message).to.equal('Parser.parse() :: No match');
             expect(error.getFurthestMatchEnd()).to.equal(-1);
             return;
         }
