@@ -46,8 +46,9 @@ describe('Parser no match failures', function () {
 
         expect(caughtError).to.be.an.instanceOf(ParseException);
         expect(caughtError.getMessage()).to.equal('Parser.parse() :: No match');
-        expect(caughtError.getFurthestMatchEnd()).to.equal(-1);
-        expect(caughtError.getLineNumber()).to.equal(-1);
+        expect(caughtError.getStartOffset()).to.equal(-1);
+        expect(caughtError.getEndOffset()).to.equal(-1);
+        expect(caughtError.getEndLineNumber()).to.equal(-1);
         expect(caughtError.getText()).to.equal(code);
         expect(caughtError.unexpectedEndOfInput()).to.be.false;
     });

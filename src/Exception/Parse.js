@@ -19,6 +19,7 @@ var _ = require('microdash'),
  *
  * @param {string} message The error message
  * @param {string} text The original text string being parsed
+ * @param {number} furthestMatchStart
  * @param {number} furthestMatchEnd
  * @param {Object} context
  * @constructor
@@ -26,6 +27,7 @@ var _ = require('microdash'),
 function ParseException(
     message,
     text,
+    furthestMatchStart,
     furthestMatchEnd,
     context
 ) {
@@ -39,6 +41,10 @@ function ParseException(
      * @type {number}
      */
     this.furthestMatchEnd = furthestMatchEnd;
+    /**
+     * @type {number}
+     */
+    this.furthestMatchStart = furthestMatchStart;
     /**
      * @type {string}
      */
@@ -58,25 +64,69 @@ _.extend(ParseException.prototype, {
     },
 
     /**
-     * Fetches the furthest 0-based absolute offset that the parse reached before terminating
+     * Fetches the last 1-based line number that the parse reached before terminating
      *
      * @return {number}
      */
-    getFurthestMatchEnd: function () {
-        return this.furthestMatchEnd;
-    },
-
-    /**
-     * Fetches the 1-based line number that the parse reached before terminating
-     *
-     * @return {number}
-     */
-    getLineNumber: function () {
+    getEndLineNumber: function () {
         var exception = this;
 
         return exception.furthestMatchEnd === -1 ?
             -1 :
             getLineNumber(exception.text, exception.furthestMatchEnd);
+    },
+
+    /**
+     * Fetches the furthest 0-based absolute offset that the parse reached before terminating
+     *
+     * @return {number}
+     */
+    getEndOffset: function () {
+        return this.furthestMatchEnd;
+    },
+
+    /**
+     * Fetches the furthest 0-based absolute offset that the parse reached before terminating
+     *
+     * @deprecated Use .getEndOffset()
+     * @return {number}
+     */
+    getFurthestMatchEnd: function () {
+        return this.getEndOffset();
+    },
+
+    /**
+     * Fetches the 1-based line number that the parse reached before terminating
+     *
+     * @deprecated Use .getEndLineNumber() instead
+     * @return {number}
+     */
+    getLineNumber: function () {
+        return this.getEndLineNumber();
+    },
+
+    /**
+     * Fetches the first 1-based line number that the parse reached before terminating
+     *
+     * @return {number}
+     */
+    getStartLineNumber: function () {
+        var exception = this;
+
+        return exception.furthestMatchStart === -1 ?
+            -1 :
+            getLineNumber(exception.text, exception.furthestMatchStart);
+    },
+
+    /**
+     * Fetches the 0-based absolute offset of the furthest match that the parse reached before terminating,
+     * at the level where it is relevant (entire parse for a general parse failure, or the component
+     * where a modifier was defined for a custom failure)
+     *
+     * @return {number}
+     */
+    getStartOffset: function () {
+        return this.furthestMatchStart;
     },
 
     /**

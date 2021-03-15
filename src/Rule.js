@@ -141,6 +141,7 @@ _.extend(Rule.prototype, {
                     error = new ParseException(
                         message,
                         text,
+                        offset + match.textOffset,
                         rule.parser.getFurthestMatchEnd(),
                         context
                     ),

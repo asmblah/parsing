@@ -39,7 +39,7 @@ describe('Parser custom failures', function () {
                 bounds: 'my_bounds'
             },
             parser = new Parser(grammarSpec),
-            code = 'first \n\nbut not immediately second';
+            code = '  first \n\nbut not immediately second';
 
         try {
             parser.parse(code);
@@ -50,10 +50,12 @@ describe('Parser custom failures', function () {
         expect(caughtError).to.be.an.instanceOf(ParseException);
         expect(caughtError.getMessage()).to.equal('My failure message');
         expect(caughtError.getContext()).to.deep.equal({my: 'context'});
+        expect(caughtError.getStartOffset()).to.equal(2);
+        expect(caughtError.getStartLineNumber()).to.equal(1);
         // Note that the whitespace after the match was not consumed, as the failure
         // was explicitly raised in the processor callback
-        expect(caughtError.getFurthestMatchEnd()).to.equal(5);
-        expect(caughtError.getLineNumber()).to.equal(1);
+        expect(caughtError.getEndOffset()).to.equal(7);
+        expect(caughtError.getEndLineNumber()).to.equal(1);
         expect(caughtError.getText()).to.equal(code);
         expect(caughtError.unexpectedEndOfInput()).to.be.false;
     });
@@ -115,7 +117,7 @@ describe('Parser custom failures', function () {
             },
             stderr = {my: 'fake stderr'},
             parser = new Parser(grammarSpec, stderr),
-            code = 'first \n\nbut not immediately second',
+            code = '\n\n  first \n\nbut not immediately second',
             result;
 
         result = parser.parse(code);
@@ -125,10 +127,13 @@ describe('Parser custom failures', function () {
         expect(result.parseException).to.be.an.instanceOf(ParseException);
         expect(result.parseException.getMessage()).to.equal('My failure message');
         expect(result.parseException.getContext()).to.deep.equal({my: 'context'});
+        // Note that the whitespace before the match _was_ consumed first
+        expect(result.parseException.getStartOffset()).to.equal(4);
+        expect(result.parseException.getStartLineNumber()).to.equal(3);
         // Note that the whitespace after the match was not consumed, as the failure
         // was explicitly raised in the processor callback
-        expect(result.parseException.getFurthestMatchEnd()).to.equal(5);
-        expect(result.parseException.getLineNumber()).to.equal(1);
+        expect(result.parseException.getEndOffset()).to.equal(9);
+        expect(result.parseException.getEndLineNumber()).to.equal(3);
         expect(result.parseException.getText()).to.equal(code);
         expect(result.parseException.unexpectedEndOfInput()).to.be.false;
     });

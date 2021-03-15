@@ -657,6 +657,22 @@ _.extend(Parser.prototype, {
         return parser.furthestMatchOffset + (parser.furthestMatch ? parser.furthestMatch.textLength : 0);
     },
 
+    /**
+     * Fetches the 0-based offset into the input string at the start
+     * of the furthest match into the string
+     *
+     * @returns {number}
+     */
+    getFurthestMatchStart: function () {
+        var parser = this;
+
+        if (parser.furthestIgnoreMatchOffset > parser.furthestMatchOffset) {
+            return parser.furthestIgnoreMatchOffset;
+        }
+
+        return parser.furthestMatchOffset;
+    },
+
     getState: function () {
         var parser = this;
 
@@ -705,6 +721,7 @@ _.extend(Parser.prototype, {
             matchEnd = 0,
             matchLine,
             matchLastLineOffset,
+            matchStart,
             message,
             whitespaceMatch;
 
@@ -755,16 +772,22 @@ _.extend(Parser.prototype, {
             furthestMatchEnd = parser.getFurthestMatchEnd();
 
             if (furthestMatchEnd === -1) {
+                matchStart = -1;
                 message = 'No match';
-            } else if (furthestMatchEnd === text.length) {
-                message = 'Unexpected end of file';
             } else {
-                message = 'Unexpected "' + text.charAt(furthestMatchEnd) + '"';
+                matchStart = match ? match.textOffset : parser.getFurthestMatchStart();
+
+                if (furthestMatchEnd === text.length) {
+                    message = 'Unexpected end of file';
+                } else {
+                    message = 'Unexpected "' + text.charAt(furthestMatchEnd) + '"';
+                }
             }
 
             error = new ParseException(
                 'Parser.parse() :: ' + message,
                 text,
+                matchStart,
                 furthestMatchEnd,
                 {}
             );
