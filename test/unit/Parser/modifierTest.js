@@ -68,6 +68,8 @@ describe('Parser grammar component match modifier', function () {
                             what: /my\s+\w+/,
                             modifier: function (capture, parse) {
                                 return capture === 'my\n text' ?
+                                    // Reenter the parser, parsing an entirely different string,
+                                    // and use its result as the result of this component's match
                                     parse('      my \n\n   differenttext  ') :
                                     capture;
                             }
