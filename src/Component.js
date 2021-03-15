@@ -10,7 +10,9 @@
 'use strict';
 
 var _ = require('microdash'),
-    copy = require('./copy');
+    copy = require('./copy'),
+    FailureException = require('./Exception/Failure'),
+    ParseException = require('./Exception/Parse');
 
 /**
  * Represents a term or group term in a grammar rule. The "root" of a rule
@@ -102,6 +104,58 @@ _.extend(Component.prototype, {
             component.parser.logFurthestMatch(subMatch, offset + subMatch.textOffset);
         } else {
             component.parser.logFurthestIgnoreMatch(subMatch, offset + subMatch.textOffset);
+        }
+
+        if (component.args.modifier) {
+            subMatch.components = component.args.modifier.call(
+                null,
+                subMatch.components,
+                /**
+                 * Parses a given string by reentering the parser.
+                 * Note that the cache will be cleared which may affect performance.
+                 *
+                 * @param {string} text
+                 * @param {Options=} options
+                 * @param {string=} startRule
+                 * @returns {Object}
+                 */
+                function subParse(text, options, startRule) {
+                    var reentrantMatch = component.parser.parse(text, options, startRule);
+
+                    // Ensure we clear the cache after reentering the parser, as the parent parser "scope"
+                    // could be corrupted by using the cache from this nested match
+                    component.parser.clearMatchCache();
+
+                    return reentrantMatch;
+                },
+                /**
+                 * Fails the entire parse with a custom message and optional context
+                 *
+                 * @param {string} message
+                 * @param {Object=} context
+                 */
+                function fail(message, context) {
+                    var errorHandler = component.parser.getErrorHandler(),
+                        error = new ParseException(
+                            message,
+                            text,
+                            component.parser.getFurthestMatchEnd(),
+                            context
+                        ),
+                        result;
+
+                    if (!errorHandler) {
+                        throw error;
+                    }
+
+                    result = errorHandler.handle(error);
+
+                    // Most ErrorHandlers are expected to throw, but if a result is returned instead
+                    // we throw this special Exception, which will be caught at the top level
+                    // and ensure that this result is returned from Parser.parse() instead
+                    throw new FailureException(message, result);
+                }
+            );
         }
 
         if (component.name !== null || component.args.allowMerge === false || component.args.captureBoundsAs) {
