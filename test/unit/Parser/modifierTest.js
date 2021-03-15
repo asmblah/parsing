@@ -143,7 +143,7 @@ describe('Parser grammar component match modifier', function () {
                 captureAllBounds: true
             },
             parser = new Parser(grammarSpec, null, options),
-            code = '  my\n text  ';
+            code = '\n\n  my\n text  ';
 
         try {
             parser.parse(code);
@@ -154,10 +154,13 @@ describe('Parser grammar component match modifier', function () {
         expect(caughtError).to.be.an.instanceOf(ParseException);
         expect(caughtError.getMessage()).to.equal('My failure message');
         expect(caughtError.getContext()).to.deep.equal({my: 'context'});
+        // Note that the whitespace before the match _was_ consumed first
+        expect(caughtError.getStartOffset()).to.equal(4);
         // Note that the whitespace after the match was not consumed, as the failure
         // was explicitly raised in the modifier callback
-        expect(caughtError.getFurthestMatchEnd()).to.equal(10);
-        expect(caughtError.getLineNumber()).to.equal(2);
+        expect(caughtError.getEndOffset()).to.equal(12);
+        expect(caughtError.getStartLineNumber()).to.equal(3);
+        expect(caughtError.getEndLineNumber()).to.equal(4);
         expect(caughtError.getText()).to.equal(code);
         expect(caughtError.unexpectedEndOfInput()).to.be.false;
     });

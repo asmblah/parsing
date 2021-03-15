@@ -23,7 +23,7 @@ var _ = require('microdash'),
  * @param {Function} qualifier
  * @param {*} arg
  * @param {Object} args
- * @param {string} name
+ * @param {string=} name
  * @param {string=} captureBoundsAs
  * @constructor
  */
@@ -41,7 +41,7 @@ function Component(parser, qualifierName, qualifier, arg, args, name, captureBou
      */
     this.captureBoundsAs = args.captureBoundsAs || captureBoundsAs;
     /**
-     * @type {string}
+     * @type {string|null}
      */
     this.name = name;
     /**
@@ -139,6 +139,7 @@ _.extend(Component.prototype, {
                         error = new ParseException(
                             message,
                             text,
+                            offset + subMatch.textOffset,
                             component.parser.getFurthestMatchEnd(),
                             context
                         ),

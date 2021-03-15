@@ -36,7 +36,7 @@ describe('Parser partial match failures', function () {
                 bounds: 'my_bounds'
             },
             parser = new Parser(grammarSpec),
-            code = 'first \n\nbut not immediately second';
+            code = '  first \n\nbut not immediately second';
 
         try {
             parser.parse(code);
@@ -46,8 +46,10 @@ describe('Parser partial match failures', function () {
 
         expect(caughtError).to.be.an.instanceOf(ParseException);
         expect(caughtError.getMessage()).to.equal('Parser.parse() :: Unexpected "b"');
-        expect(caughtError.getFurthestMatchEnd()).to.equal(8);
-        expect(caughtError.getLineNumber()).to.equal(3);
+        // Note that the whitespace before the match _was_ consumed first
+        expect(caughtError.getStartOffset()).to.equal(2);
+        expect(caughtError.getEndOffset()).to.equal(10);
+        expect(caughtError.getEndLineNumber()).to.equal(3);
         expect(caughtError.getText()).to.equal(code);
         expect(caughtError.unexpectedEndOfInput()).to.be.false;
     });
@@ -106,7 +108,7 @@ describe('Parser partial match failures', function () {
             },
             stderr = {my: 'fake stderr'},
             parser = new Parser(grammarSpec, stderr),
-            code = 'first \n\nbut not immediately second',
+            code = '   first \n\nbut not immediately second',
             result;
 
         result = parser.parse(code);
@@ -115,8 +117,10 @@ describe('Parser partial match failures', function () {
         expect(result.stderr).to.equal(stderr);
         expect(result.parseException).to.be.an.instanceOf(ParseException);
         expect(result.parseException.getMessage()).to.equal('Parser.parse() :: Unexpected "b"');
-        expect(result.parseException.getFurthestMatchEnd()).to.equal(8);
-        expect(result.parseException.getLineNumber()).to.equal(3);
+        // Note that the whitespace before the match _was_ consumed first
+        expect(result.parseException.getStartOffset()).to.equal(3);
+        expect(result.parseException.getEndOffset()).to.equal(11);
+        expect(result.parseException.getEndLineNumber()).to.equal(3);
         expect(result.parseException.getText()).to.equal(code);
         expect(result.parseException.unexpectedEndOfInput()).to.be.false;
     });

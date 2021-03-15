@@ -71,7 +71,8 @@ describe('Parser "oneOrMoreOf" qualifier', function () {
             parser.parse(code);
         } catch (error) {
             expect(error.message).to.equal('Parser.parse() :: No match');
-            expect(error.getFurthestMatchEnd()).to.equal(-1);
+            expect(error.getStartOffset()).to.equal(-1);
+            expect(error.getEndOffset()).to.equal(-1);
             return;
         }
 

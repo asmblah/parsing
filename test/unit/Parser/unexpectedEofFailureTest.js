@@ -37,7 +37,7 @@ describe('Parser unexpected end-of-file failures', function () {
                 bounds: 'my_bounds'
             },
             parser = new Parser(grammarSpec),
-            code = 'first';
+            code = '   first';
 
         try {
             parser.parse(code);
@@ -47,8 +47,10 @@ describe('Parser unexpected end-of-file failures', function () {
 
         expect(caughtError).to.be.an.instanceOf(ParseException);
         expect(caughtError.getMessage()).to.equal('Parser.parse() :: Unexpected end of file');
-        expect(caughtError.getFurthestMatchEnd()).to.equal(5);
-        expect(caughtError.getLineNumber()).to.equal(1);
+        // Note that the whitespace before the match _was_ consumed first
+        expect(caughtError.getStartOffset()).to.equal(3);
+        expect(caughtError.getEndOffset()).to.equal(8);
+        expect(caughtError.getEndLineNumber()).to.equal(1);
         expect(caughtError.getText()).to.equal(code);
         expect(caughtError.unexpectedEndOfInput()).to.be.true;
     });
