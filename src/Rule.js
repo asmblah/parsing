@@ -16,9 +16,10 @@ var _ = require('microdash'),
     ParseException = require('./Exception/Parse');
 
 /**
- * Represents a single rule in the grammar
+ * Represents a single rule in the grammar.
  *
  * @param {Parser} parser
+ * @param {Object} context
  * @param {object} matchCache
  * @param {string} name
  * @param {string|null} captureName An optional different name to use for any matches for the rule
@@ -29,6 +30,7 @@ var _ = require('microdash'),
  */
 function Rule(
     parser,
+    context,
     matchCache,
     name,
     captureName,
@@ -44,6 +46,10 @@ function Rule(
      * @type {Component|null}
      */
     this.component = null;
+    /**
+     * @type {Object}
+     */
+    this.context = context;
     /**
      * @type {Object|null}
      */
@@ -72,7 +78,7 @@ function Rule(
 
 _.extend(Rule.prototype, {
     /**
-     * Attempts to match this rule at the given offset into the string
+     * Attempts to match this rule at the given offset into the string.
      *
      * @param {string} text
      * @param {number} offset 0-based absolute offset into the string to match at
@@ -148,7 +154,7 @@ _.extend(Rule.prototype, {
                     var reentrantMatch = rule.parser.parse(text, options, startRule);
 
                     // Ensure we clear the cache after reentering the parser, as the parent parser "scope"
-                    // could be corrupted by using the cache from this nested match
+                    // could be corrupted by using the cache from this nested match.
                     rule.parser.clearMatchCache();
 
                     return reentrantMatch;
@@ -179,10 +185,22 @@ _.extend(Rule.prototype, {
 
                     // Most ErrorHandlers are expected to throw, but if a result is returned instead
                     // we throw this special Exception, which will be caught at the top level
-                    // and ensure that this result is returned from Parser.parse() instead
+                    // and ensure that this result is returned from Parser.parse() instead.
                     throw new AbortException(message, result);
-                }
+                },
+
+                // Context is a user-defined object with any data for the processor to use.
+                rule.context
             );
+
+            if (match.components === null) {
+                // Match was explicitly failed by returning null from the processor.
+
+                // Record the fact that this rule did _not_ match, so we don't attempt to match it again.
+                rule.matchCache[offset] = null;
+
+                return null;
+            }
 
             if (boundsCaptureName) {
                 match.components[boundsCaptureName] = capturedOffset;
@@ -197,7 +215,7 @@ _.extend(Rule.prototype, {
     /**
      * Sets the root component of this rule
      * (must be done via a setter to solve the circular dependency issue
-     * when rules in the grammar are recursive)
+     * when rules in the grammar are recursive).
      *
      * @param {Component} component
      */

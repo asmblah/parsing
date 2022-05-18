@@ -20,7 +20,10 @@ var _ = require('microdash'),
     Rule = require('./Rule');
 
 function Parser(grammarSpec, stderr, options) {
+    var context;
+
     options = options || {};
+    context = options.context || {};
 
     this.errorHandler = null;
     this.furthestIgnoreMatch = null;
@@ -412,7 +415,7 @@ function Parser(grammarSpec, stderr, options) {
             rules = {};
 
         // Special BeginningOfFile rule
-        rules['<BOF>'] = new Rule(parser, createMatchCache(), '<BOF>', null, null);
+        rules['<BOF>'] = new Rule(parser, context, createMatchCache(), '<BOF>', null, null);
         rules['<BOF>'].setComponent(new Component(parser, 'what', qualifiers.what, function (
             text,
             offset,
@@ -438,7 +441,7 @@ function Parser(grammarSpec, stderr, options) {
         }, {}, null));
 
         // Special EndOfFile rule
-        rules['<EOF>'] = new Rule(parser, createMatchCache(), '<EOF>', null, null);
+        rules['<EOF>'] = new Rule(parser, context, createMatchCache(), '<EOF>', null, null);
         rules['<EOF>'].setComponent(new Component(parser, 'what', qualifiers.what, function (
             text,
             offset,
@@ -467,6 +470,7 @@ function Parser(grammarSpec, stderr, options) {
         function createRule(ruleSpec, name) {
             return new Rule(
                 parser,
+                context,
                 createMatchCache(),
                 name,
                 ruleSpec.captureAs || null,
