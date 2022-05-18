@@ -12,7 +12,7 @@
 var _ = require('microdash'),
     copy = require('./copy'),
     undef,
-    FailureException = require('./Exception/Failure'),
+    AbortException = require('./Exception/Abort'),
     ParseException = require('./Exception/Parse');
 
 /**
@@ -82,7 +82,8 @@ _.extend(Rule.prototype, {
      * @return {Object|null}
      */
     match: function (text, offset, line, lineOffset, options) {
-        var capturedOffset,
+        var boundsCaptureName,
+            capturedOffset,
             component,
             rule = this,
             match = rule.matchCache[offset];
@@ -124,43 +125,67 @@ _.extend(Rule.prototype, {
         }
 
         if (rule.processor) {
-            if (rule.component.getOffsetCaptureName()) {
-                capturedOffset = match.components[rule.component.getOffsetCaptureName()];
+            boundsCaptureName = rule.component.getOffsetCaptureName();
+
+            if (boundsCaptureName) {
+                capturedOffset = match.components[boundsCaptureName];
             }
 
-            match.components = rule.processor(match.components, function (text, options, startRule) {
-                var reentrantMatch = rule.parser.parse(text, options, startRule);
+            match.components = rule.processor.call(
+                null,
+                match.components,
 
-                // Ensure we clear the cache after reentering the parser, as the parent parser "scope"
-                // could be corrupted by using the cache from this nested match
-                rule.parser.clearMatchCache();
+                /**
+                 * Parses a given string by reentering the parser.
+                 * Note that the cache will be cleared which may affect performance.
+                 *
+                 * @param {string} text
+                 * @param {Options=} options
+                 * @param {string=} startRule
+                 * @returns {Object}
+                 */
+                function subParse(text, options, startRule) {
+                    var reentrantMatch = rule.parser.parse(text, options, startRule);
 
-                return reentrantMatch;
-            }, function fail(message, context) {
-                var errorHandler = rule.parser.getErrorHandler(),
-                    error = new ParseException(
-                        message,
-                        text,
-                        offset + match.textOffset,
-                        rule.parser.getFurthestMatchEnd(),
-                        context
-                    ),
-                    result;
+                    // Ensure we clear the cache after reentering the parser, as the parent parser "scope"
+                    // could be corrupted by using the cache from this nested match
+                    rule.parser.clearMatchCache();
 
-                if (!errorHandler) {
-                    throw error;
+                    return reentrantMatch;
+                },
+
+                /**
+                 * Aborts the entire parse with a custom message and optional context.
+                 *
+                 * @param {string} message
+                 * @param {Object=} context
+                 */
+                function abort(message, context) {
+                    var errorHandler = rule.parser.getErrorHandler(),
+                        error = new ParseException(
+                            message,
+                            text,
+                            offset + match.textOffset,
+                            rule.parser.getFurthestMatchEnd(),
+                            context
+                        ),
+                        result;
+
+                    if (!errorHandler) {
+                        throw error;
+                    }
+
+                    result = errorHandler.handle(error);
+
+                    // Most ErrorHandlers are expected to throw, but if a result is returned instead
+                    // we throw this special Exception, which will be caught at the top level
+                    // and ensure that this result is returned from Parser.parse() instead
+                    throw new AbortException(message, result);
                 }
+            );
 
-                result = errorHandler.handle(error);
-
-                // Most ErrorHandlers are expected to throw, but if a result is returned instead
-                // we throw this special Exception, which will be caught at the top level
-                // and ensure that this result is returned from Parser.parse() instead
-                throw new FailureException(message, result);
-            });
-
-            if (rule.component.getOffsetCaptureName()) {
-                match.components[rule.component.getOffsetCaptureName()] = capturedOffset;
+            if (boundsCaptureName) {
+                match.components[boundsCaptureName] = capturedOffset;
             }
         }
 

@@ -11,7 +11,7 @@
 
 var _ = require('microdash'),
     copy = require('./copy'),
-    FailureException = require('./Exception/Failure'),
+    AbortException = require('./Exception/Abort'),
     ParseException = require('./Exception/Parse');
 
 /**
@@ -110,6 +110,7 @@ _.extend(Component.prototype, {
             subMatch.components = component.args.modifier.call(
                 null,
                 subMatch.components,
+
                 /**
                  * Parses a given string by reentering the parser.
                  * Note that the cache will be cleared which may affect performance.
@@ -128,13 +129,14 @@ _.extend(Component.prototype, {
 
                     return reentrantMatch;
                 },
+
                 /**
-                 * Fails the entire parse with a custom message and optional context
+                 * Aborts the entire parse with a custom message and optional context
                  *
                  * @param {string} message
                  * @param {Object=} context
                  */
-                function fail(message, context) {
+                function abort(message, context) {
                     var errorHandler = component.parser.getErrorHandler(),
                         error = new ParseException(
                             message,
@@ -154,7 +156,7 @@ _.extend(Component.prototype, {
                     // Most ErrorHandlers are expected to throw, but if a result is returned instead
                     // we throw this special Exception, which will be caught at the top level
                     // and ensure that this result is returned from Parser.parse() instead
-                    throw new FailureException(message, result);
+                    throw new AbortException(message, result);
                 }
             );
         }

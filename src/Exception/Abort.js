@@ -14,13 +14,13 @@ var _ = require('microdash'),
     Exception = require('./Exception');
 
 /**
- * Represents an explicit failed parse attempt
+ * Represents an explicitly aborted parse attempt.
  *
  * @param {string} message The error message
  * @param {*} result The result from the custom ErrorHandler
  * @constructor
  */
-function FailureException(
+function AbortException(
     message,
     result
 ) {
@@ -32,11 +32,11 @@ function FailureException(
     this.result = result;
 }
 
-util.inherits(FailureException, Exception);
+util.inherits(AbortException, Exception);
 
-_.extend(FailureException.prototype, {
+_.extend(AbortException.prototype, {
     /**
-     * Fetches the result returned from the custom ErrorHandler
+     * Fetches the result returned from the custom ErrorHandler.
      *
      * @return {*}
      */
@@ -45,4 +45,4 @@ _.extend(FailureException.prototype, {
     }
 });
 
-module.exports = FailureException;
+module.exports = AbortException;

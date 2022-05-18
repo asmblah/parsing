@@ -13,7 +13,7 @@ var expect = require('chai').expect,
     ParseException = require('../../../../src/Exception/Parse'),
     Parser = require('../../../../src/Parser');
 
-describe('Parser grammar rule match processor custom failures', function () {
+describe('Parser grammar rule match processor abort', function () {
     it('should throw a ParseException when there is no custom ErrorHandler specified', function () {
         var caughtError,
             grammarSpec = {
@@ -26,8 +26,8 @@ describe('Parser grammar rule match processor custom failures', function () {
                     },
                     'my_first_statement': {
                         components: [{name: 'text', what: /first/}],
-                        processor: function (node, parse, fail) {
-                            fail('My failure message', {my: 'context'});
+                        processor: function (node, parse, abort) {
+                            abort('My abort message', {my: 'context'});
                         }
                     },
                     'my_second_statement': {
@@ -48,12 +48,12 @@ describe('Parser grammar rule match processor custom failures', function () {
         }
 
         expect(caughtError).to.be.an.instanceOf(ParseException);
-        expect(caughtError.getMessage()).to.equal('My failure message');
+        expect(caughtError.getMessage()).to.equal('My abort message');
         expect(caughtError.getContext()).to.deep.equal({my: 'context'});
         expect(caughtError.getStartOffset()).to.equal(2);
         expect(caughtError.getStartLineNumber()).to.equal(1);
-        // Note that the whitespace after the match was not consumed, as the failure
-        // was explicitly raised in the processor callback
+        // Note that the whitespace after the match was not consumed, as the abort
+        // was explicitly raised in the processor callback.
         expect(caughtError.getEndOffset()).to.equal(7);
         expect(caughtError.getEndLineNumber()).to.equal(1);
         expect(caughtError.getText()).to.equal(code);
@@ -65,7 +65,7 @@ describe('Parser grammar rule match processor custom failures', function () {
                 function State() {
                 }
 
-                // State classes can define arbitrary APIs, there is none expected
+                // State classes can define arbitrary APIs, there is none expected.
                 State.prototype.getMyValue = function () {
                     return 21;
                 };
@@ -80,10 +80,10 @@ describe('Parser grammar rule match processor custom failures', function () {
 
                 ErrorHandler.prototype.handle = function (parseException) {
                     return {
-                        // Call the method on the instance of our custom State class
+                        // Call the method on the instance of our custom State class.
                         myValue: this.state.getMyValue(),
 
-                        // Pass the ParseException & Stderr back for inspection
+                        // Pass the ParseException & Stderr back for inspection.
                         parseException: parseException,
                         stderr: this.stderr
                     };
@@ -103,8 +103,8 @@ describe('Parser grammar rule match processor custom failures', function () {
                     },
                     'my_first_statement': {
                         components: [{name: 'text', what: /first/}],
-                        processor: function (node, parse, fail) {
-                            fail('My failure message', {my: 'context'});
+                        processor: function (node, parse, abort) {
+                            abort('My abort message', {my: 'context'});
                         }
                     },
                     'my_second_statement': {
@@ -125,13 +125,13 @@ describe('Parser grammar rule match processor custom failures', function () {
         expect(result.myValue).to.equal(21);
         expect(result.stderr).to.equal(stderr);
         expect(result.parseException).to.be.an.instanceOf(ParseException);
-        expect(result.parseException.getMessage()).to.equal('My failure message');
+        expect(result.parseException.getMessage()).to.equal('My abort message');
         expect(result.parseException.getContext()).to.deep.equal({my: 'context'});
-        // Note that the whitespace before the match _was_ consumed first
+        // Note that the whitespace before the match _was_ consumed first.
         expect(result.parseException.getStartOffset()).to.equal(4);
         expect(result.parseException.getStartLineNumber()).to.equal(3);
-        // Note that the whitespace after the match was not consumed, as the failure
-        // was explicitly raised in the processor callback
+        // Note that the whitespace after the match was not consumed, as the abort
+        // was explicitly raised in the processor callback.
         expect(result.parseException.getEndOffset()).to.equal(9);
         expect(result.parseException.getEndLineNumber()).to.equal(3);
         expect(result.parseException.getText()).to.equal(code);

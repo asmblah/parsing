@@ -13,9 +13,9 @@ var _ = require('microdash'),
     countNewlines = require('./countNewlines'),
     findLastNewlineFrom = require('./findLastNewlineFrom'),
     hasOwn = {}.hasOwnProperty,
+    AbortException = require('./Exception/Abort'),
     Component = require('./Component'),
     Exception = require('./Exception/Exception'),
-    FailureException = require('./Exception/Failure'),
     ParseException = require('./Exception/Parse'),
     Rule = require('./Rule');
 
@@ -759,7 +759,7 @@ _.extend(Parser.prototype, {
                 }
             }
         } catch (error) {
-            if (!(error instanceof FailureException)) {
+            if (!(error instanceof AbortException)) {
                 throw error;
             }
 
