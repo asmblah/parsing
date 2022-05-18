@@ -416,7 +416,7 @@ function Parser(grammarSpec, stderr, options) {
 
         // Special BeginningOfFile rule
         rules['<BOF>'] = new Rule(parser, context, createMatchCache(), '<BOF>', null, null);
-        rules['<BOF>'].setComponent(new Component(parser, 'what', qualifiers.what, function (
+        rules['<BOF>'].setComponent(new Component(parser, context, 'what', qualifiers.what, function (
             text,
             offset,
             textOffset,
@@ -442,7 +442,7 @@ function Parser(grammarSpec, stderr, options) {
 
         // Special EndOfFile rule
         rules['<EOF>'] = new Rule(parser, context, createMatchCache(), '<EOF>', null, null);
-        rules['<EOF>'].setComponent(new Component(parser, 'what', qualifiers.what, function (
+        rules['<EOF>'].setComponent(new Component(parser, context, 'what', qualifiers.what, function (
             text,
             offset,
             textOffset,
@@ -590,6 +590,7 @@ function Parser(grammarSpec, stderr, options) {
 
                 return new Component(
                     parser,
+                    context,
                     qualifierName,
                     qualifiers[qualifierName],
                     arg,

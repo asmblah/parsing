@@ -19,6 +19,7 @@ var _ = require('microdash'),
  * is also represented with a component.
  *
  * @param {Parser} parser
+ * @param {Object} context
  * @param {string} qualifierName
  * @param {Function} qualifier
  * @param {*} arg
@@ -27,7 +28,16 @@ var _ = require('microdash'),
  * @param {string=} captureBoundsAs
  * @constructor
  */
-function Component(parser, qualifierName, qualifier, arg, args, name, captureBoundsAs) {
+function Component(
+    parser,
+    context,
+    qualifierName,
+    qualifier,
+    arg,
+    args,
+    name,
+    captureBoundsAs
+) {
     /**
      * @type {*}
      */
@@ -40,6 +50,10 @@ function Component(parser, qualifierName, qualifier, arg, args, name, captureBou
      * @type {string|null}
      */
     this.captureBoundsAs = args.captureBoundsAs || captureBoundsAs;
+    /**
+     * @type {Object}
+     */
+    this.context = context;
     /**
      * @type {string|null}
      */
@@ -157,8 +171,16 @@ _.extend(Component.prototype, {
                     // we throw this special Exception, which will be caught at the top level
                     // and ensure that this result is returned from Parser.parse() instead
                     throw new AbortException(message, result);
-                }
+                },
+
+                // Context is a user-defined object with any data for the modifier to use.
+                component.context
             );
+
+            if (subMatch.components === null) {
+                // Match was explicitly failed by returning null from the modifier.
+                return null;
+            }
         }
 
         if (component.name !== null || component.args.allowMerge === false || component.args.captureBoundsAs) {

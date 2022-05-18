@@ -13,7 +13,7 @@ var expect = require('chai').expect,
     Parser = require('../../../../src/Parser');
 
 describe('Parser grammar rule match processor fail', function () {
-    it('should be able to fail a component match', function () {
+    it('should be able to fail a rule match', function () {
         var grammarSpec = {
                 ignore: 'whitespace',
                 rules: {
@@ -31,7 +31,7 @@ describe('Parser grammar rule match processor fail', function () {
                             // Fail this rule every other time, causing my_second_statement to match instead.
                             context.ignoreMyFirst = !context.ignoreMyFirst;
 
-                            // Returning null from a processor fails the component's match.
+                            // Returning null from a processor fails the rule's match.
                             return ignore ? null : node;
                         }
                     },
