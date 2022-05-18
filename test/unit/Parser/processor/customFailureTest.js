@@ -10,10 +10,10 @@
 'use strict';
 
 var expect = require('chai').expect,
-    ParseException = require('../../../src/Exception/Parse'),
-    Parser = require('../../../src/Parser');
+    ParseException = require('../../../../src/Exception/Parse'),
+    Parser = require('../../../../src/Parser');
 
-describe('Parser custom failures', function () {
+describe('Parser grammar rule match processor custom failures', function () {
     it('should throw a ParseException when there is no custom ErrorHandler specified', function () {
         var caughtError,
             grammarSpec = {
