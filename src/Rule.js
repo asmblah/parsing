@@ -94,7 +94,20 @@ _.extend(Rule.prototype, {
             rule = this,
             match = rule.matchCache[offset];
 
-        if (match !== undef) {
+        /*
+         * Left-recursion is handled by initially storing `true` in the match cache.
+         * If `true` is fetched back, we have detected a cycle,
+         * so we mark this match as a failure by returning null.
+         *
+         * This will cause a parent oneOf alternation to try the next alternative, for example.
+         */
+        if (match === true) {
+            match = undef;
+
+            rule.matchCache[offset] = null;
+        } else if (match === undef) {
+            rule.matchCache[offset] = true;
+        } else {
             return match;
         }
 
