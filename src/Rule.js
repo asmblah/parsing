@@ -11,6 +11,7 @@
 
 var _ = require('microdash'),
     copy = require('./copy'),
+    structuredClone = require('core-js-pure/actual/structured-clone'),
     undef,
     AbortException = require('./Exception/Abort'),
     ParseException = require('./Exception/Parse');
@@ -149,6 +150,9 @@ _.extend(Rule.prototype, {
             if (boundsCaptureName) {
                 capturedOffset = match.components[boundsCaptureName];
             }
+
+            // Allow processor to modify the match object without corrupting the cache.
+            match = structuredClone(match);
 
             match.components = rule.processor.call(
                 null,

@@ -11,6 +11,7 @@
 
 var _ = require('microdash'),
     copy = require('./copy'),
+    structuredClone = require('core-js-pure/actual/structured-clone'),
     AbortException = require('./Exception/Abort'),
     ParseException = require('./Exception/Parse');
 
@@ -95,7 +96,6 @@ _.extend(Component.prototype, {
     match: function (text, offset, line, lineOffset, options) {
         var component = this,
             match,
-            modifierResult,
             subMatch;
 
         // Cascade ignoreWhitespace down to descendants of this component
@@ -122,7 +122,10 @@ _.extend(Component.prototype, {
         }
 
         if (component.args.modifier) {
-            modifierResult = component.args.modifier.call(
+            // Allow modifier to modify the match object without corrupting the cache.
+            subMatch = structuredClone(subMatch);
+
+            subMatch.components = component.args.modifier.call(
                 null,
                 subMatch.components,
 
@@ -178,14 +181,10 @@ _.extend(Component.prototype, {
                 component.context
             );
 
-            if (modifierResult === null) {
+            if (subMatch.components === null) {
                 // Match was explicitly failed by returning null from the modifier.
                 return null;
             }
-
-            subMatch = _.extend({}, subMatch, {
-                components: modifierResult
-            });
         }
 
         if (component.name !== null || component.args.allowMerge === false || component.args.captureBoundsAs) {
