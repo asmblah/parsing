@@ -95,6 +95,7 @@ _.extend(Component.prototype, {
     match: function (text, offset, line, lineOffset, options) {
         var component = this,
             match,
+            modifierResult,
             subMatch;
 
         // Cascade ignoreWhitespace down to descendants of this component
@@ -121,7 +122,7 @@ _.extend(Component.prototype, {
         }
 
         if (component.args.modifier) {
-            subMatch.components = component.args.modifier.call(
+            modifierResult = component.args.modifier.call(
                 null,
                 subMatch.components,
 
@@ -177,10 +178,14 @@ _.extend(Component.prototype, {
                 component.context
             );
 
-            if (subMatch.components === null) {
+            if (modifierResult === null) {
                 // Match was explicitly failed by returning null from the modifier.
                 return null;
             }
+
+            subMatch = _.extend({}, subMatch, {
+                components: modifierResult
+            });
         }
 
         if (component.name !== null || component.args.allowMerge === false || component.args.captureBoundsAs) {

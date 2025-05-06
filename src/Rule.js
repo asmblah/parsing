@@ -215,7 +215,7 @@ _.extend(Rule.prototype, {
                 return null;
             }
 
-            if (boundsCaptureName) {
+            if (boundsCaptureName && match.components !== '') {
                 match.components[boundsCaptureName] = capturedOffset;
             }
         }

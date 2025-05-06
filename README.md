@@ -3,7 +3,7 @@ Parsing
 
 [![Build Status](https://secure.travis-ci.org/asmblah/parsing.png?branch=master)](http://travis-ci.org/asmblah/parsing)
 
-A JSON-esque grammar-based parser.
+A JSON-esque grammar-based [Packrat PEG parser][].
 
 Getting started
 ---------------
@@ -141,3 +141,5 @@ console.log(parser.parse('go; do_something_custom; end;'));
 Keeping up to date
 ------------------
 - [Follow me on Twitter](https://twitter.com/@asmblah) for updates: [https://twitter.com/@asmblah](https://twitter.com/@asmblah)
+
+[Packrat PEG parser]: https://en.wikipedia.org/wiki/Packrat_parser

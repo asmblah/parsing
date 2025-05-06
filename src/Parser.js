@@ -161,7 +161,10 @@ function Parser(grammarSpec, stderr, options) {
                         lines += componentMatch.lines;
                         lastLineOffset = componentMatch.lastLineOffset;
                         textLength += componentMatch.textLength;
-                        matches.push(componentMatch.components);
+
+                        if (componentMatch.components !== '') {
+                            matches.push(componentMatch.components);
+                        }
 
                         if (firstLine === null) {
                             firstLine = componentMatch.firstLine;
@@ -355,7 +358,7 @@ function Parser(grammarSpec, stderr, options) {
 
                     return null;
                 },
-                // Like "*"
+                // Like "*".
                 'zeroOrMoreOf': function (text, offset, line, lineOffset, arg, args, options) {
                     var componentMatch,
                         firstLine = null,
@@ -380,7 +383,10 @@ function Parser(grammarSpec, stderr, options) {
                         lines += componentMatch.lines;
                         lastLineOffset = componentMatch.lastLineOffset;
                         textLength += componentMatch.textLength;
-                        matches.push(componentMatch.components);
+
+                        if (componentMatch.components !== '') {
+                            matches.push(componentMatch.components);
+                        }
 
                         if (firstLine === null) {
                             firstLine = componentMatch.firstLine;
