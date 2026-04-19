@@ -11,7 +11,7 @@
 
 var _ = require('microdash'),
     copy = require('./copy'),
-    structuredClone = require('core-js-pure/actual/structured-clone'),
+    deepClone = require('./deepClone'),
     undef,
     AbortException = require('./Exception/Abort'),
     ParseException = require('./Exception/Parse');
@@ -151,8 +151,11 @@ _.extend(Rule.prototype, {
                 capturedOffset = match.components[boundsCaptureName];
             }
 
-            // Allow processor to modify the match object without corrupting the cache.
-            match = structuredClone(match);
+            // Deep-clone the match to prevent processors from corrupting child rule caches.
+            // Processors may mutate nested properties, so a full deep clone is required.
+            // We use a fast custom clone rather than structuredClone as AST nodes only ever
+            // contain plain objects, arrays, strings, numbers and booleans.
+            match = deepClone(match);
 
             match.components = rule.processor.call(
                 null,

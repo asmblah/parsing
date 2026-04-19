@@ -25,7 +25,6 @@
     "test": "npm run jshint && npm run mocha"
   },
   "dependencies": {
-    "core-js-pure": "^3.42.0",
     "microdash": "^1.4.2"
   },
   "devDependencies": {

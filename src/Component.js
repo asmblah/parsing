@@ -11,7 +11,7 @@
 
 var _ = require('microdash'),
     copy = require('./copy'),
-    structuredClone = require('core-js-pure/actual/structured-clone'),
+    deepClone = require('./deepClone'),
     AbortException = require('./Exception/Abort'),
     ParseException = require('./Exception/Parse');
 
@@ -122,8 +122,11 @@ _.extend(Component.prototype, {
         }
 
         if (component.args.modifier) {
-            // Allow modifier to modify the match object without corrupting the cache.
-            subMatch = structuredClone(subMatch);
+            // Deep-clone the match to prevent modifiers from corrupting child rule caches.
+            // Modifiers may mutate nested properties, so a full deep clone is required.
+            // We use a fast custom clone rather than structuredClone as AST nodes only ever
+            // contain plain objects, arrays, strings, numbers and booleans.
+            subMatch = deepClone(subMatch);
 
             subMatch.components = component.args.modifier.call(
                 null,

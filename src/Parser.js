@@ -38,13 +38,23 @@ function Parser(grammarSpec, stderr, options) {
     this.stderr = stderr;
 
     (function (parser) {
-        // Ensure the regex is anchored to the start of the string so it matches the very next characters
+        // Ensure the regex can only match at the current parser position.
+        // We use the sticky flag (y) so exec() matches at lastIndex without creating a substring.
         function anchorRegex(regex) {
-            if (regex.source.charAt(0) !== '^') {
-                regex = new RegExp('^(?:' + regex.source + ')', regex.toString().match(/[^\/]*$/)[0]);
+            var flags = regex.toString().match(/[^\/]*$/)[0];
+            var source = regex.source;
+
+            // Remove a leading ^ if present; sticky already anchors to lastIndex,
+            // and combining ^ with y would restrict matching to offset 0 only.
+            if (source.charAt(0) === '^') {
+                source = source.slice(1);
             }
 
-            return regex;
+            if (flags.indexOf('y') === -1) {
+                flags += 'y';
+            }
+
+            return new RegExp(source, flags);
         }
 
         // Speed up repeated match tests in complex grammars by caching component matches
@@ -303,9 +313,10 @@ function Parser(grammarSpec, stderr, options) {
                     } else if (arg instanceof RegExp) {
                         skipWhitespace();
 
-                        // TODO: Optimise so we dont need to do this substr -
-                        //       perhaps use regex sticky flag and set .lastIndexOf where supported?
-                        match = text.substr(offset + whitespaceLength).match(arg);
+                        // Use the sticky flag set by anchorRegex: match at the exact position
+                        // without allocating a substring on every attempt.
+                        arg.lastIndex = offset + whitespaceLength;
+                        match = arg.exec(text);
 
                         if (match) {
                             captureIndex = args.captureIndex || 0;
