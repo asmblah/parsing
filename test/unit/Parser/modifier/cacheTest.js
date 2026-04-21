@@ -14,7 +14,7 @@ var expect = require('chai').expect,
 
 // Note that these are not the same as Processors, which operate on a Rule's root Component
 describe('Parser grammar component match modifier cache handling', function () {
-    it('should allow modifiers to safely modify the passed capture when it is a rule match', function () {
+    it('should give modifiers a frozen snapshot so that returning a modified copy does not corrupt child rule caches', function () {
         var grammarSpec = {
                 ignore: 'whitespace',
                 rules: {
@@ -29,10 +29,9 @@ describe('Parser grammar component match modifier cache handling', function () {
                             name: 'your_capture',
                             rule: 'their_rule',
                             modifier: function (capture) {
-                                // Attempt to modify the cached match of their_rule.
-                                capture.their_capture = 'modified';
-
-                                return capture;
+                                // Return a NEW object with a modified their_capture instead of
+                                // mutating capture in place (which would throw because it is frozen).
+                                return Object.assign({}, capture, {their_capture: 'modified'});
                             }
                         }]
                     },
@@ -61,9 +60,41 @@ describe('Parser grammar component match modifier cache handling', function () {
             parser = new Parser(grammarSpec),
             code = '  my\n text  ';
 
+        // their_rule's cache must not be corrupted by your_rule's modifier:
+        // the modifier for their_rule should still see the original 'my\n text'.
         expect(parser.parse(code)).to.deep.equal({
             name: 'my_rule',
             my_capture: '[my prefix]my\n text[my suffix]'
         });
+    });
+
+    it('should throw when a modifier attempts to mutate the frozen input', function () {
+        var grammarSpec = {
+                rules: {
+                    'their_rule': {
+                        components: [{name: 'val', what: /\w+/}]
+                    },
+                    'my_rule': {
+                        components: [{
+                            name: 'my_capture',
+                            rule: 'their_rule',
+                            modifier: function (capture) {
+                                capture.val = 'mutated'; // Must throw — capture is frozen.
+
+                                return capture;
+                            }
+                        }]
+                    }
+                },
+                start: 'my_rule'
+            },
+            parser = new Parser(grammarSpec);
+
+        expect(function () {
+            parser.parse('hello');
+        }).to.throw(
+            TypeError,
+            'Cannot assign to read only property \'val\''
+        );
     });
 });

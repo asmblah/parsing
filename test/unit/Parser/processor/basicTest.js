@@ -116,10 +116,10 @@ describe('Parser grammar rule match processor basic', function () {
                             }]
                         }],
                         processor: function (node) {
-                            // Override the captured string.
-                            node.my_capture = '[my prefix]' + node.my_capture.their_capture + '[my suffix]';
-
-                            return node;
+                            // Override the captured string — return a new object (node is frozen).
+                            return Object.assign({}, node, {
+                                my_capture: '[my prefix]' + node.my_capture.their_capture + '[my suffix]'
+                            });
                         }
                     },
                     'whitespace': /\s+/,

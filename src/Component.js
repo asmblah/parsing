@@ -11,7 +11,7 @@
 
 var _ = require('microdash'),
     copy = require('./copy'),
-    deepClone = require('./deepClone'),
+    deepFreeze = require('./deepFreeze'),
     AbortException = require('./Exception/Abort'),
     ParseException = require('./Exception/Parse');
 
@@ -122,13 +122,12 @@ _.extend(Component.prototype, {
         }
 
         if (component.args.modifier) {
-            // Deep-clone the match to prevent modifiers from corrupting child rule caches.
-            // Modifiers may mutate nested properties, so a full deep clone is required.
-            // We use a fast custom clone rather than structuredClone as AST nodes only ever
-            // contain plain objects, arrays, strings, numbers and booleans.
-            subMatch = deepClone(subMatch);
+            // Freeze the match components so modifiers cannot mutate cached data.
+            // Modifiers must return new objects rather than mutating in place.
+            // Already-frozen objects are skipped by deepFreeze so the cost is O(1) on re-use.
+            deepFreeze(subMatch.components);
 
-            subMatch.components = component.args.modifier.call(
+            var modifiedComponents = component.args.modifier.call(
                 null,
                 subMatch.components,
 
@@ -142,11 +141,17 @@ _.extend(Component.prototype, {
                  * @returns {Object}
                  */
                 function subParse(text, options, startRule) {
-                    var reentrantMatch = component.parser.parse(text, options, startRule);
+                    var reentrantMatch;
 
-                    // Ensure we clear the cache after reentering the parser, as the parent parser "scope"
-                    // could be corrupted by using the cache from this nested match
-                    component.parser.clearMatchCache();
+                    // Save the parent parse's cached results before the nested parse() call
+                    // clears the shared cache, then restore them afterwards.
+                    component.parser.pushMatchCaches();
+
+                    try {
+                        reentrantMatch = component.parser.parse(text, options, startRule);
+                    } finally {
+                        component.parser.popMatchCaches();
+                    }
 
                     return reentrantMatch;
                 },
@@ -184,17 +189,20 @@ _.extend(Component.prototype, {
                 component.context
             );
 
-            if (subMatch.components === null) {
+            if (modifiedComponents === null) {
                 // Match was explicitly failed by returning null from the modifier.
                 return null;
             }
+
+            // Create a fresh match wrapper with the modifier's returned components.
+            subMatch = Object.assign({}, subMatch, {components: modifiedComponents});
         }
 
         if (component.name !== null || component.args.allowMerge === false || component.args.captureBoundsAs) {
             match = createSubMatch(text, subMatch, component, offset);
         } else {
             // Component is not named: merge its captures in if an array
-            if (_.isArray(subMatch.components)) {
+            if (Array.isArray(subMatch.components)) {
                 match = mergeCaptures(subMatch, component, text, offset);
             } else {
                 match = subMatch;
@@ -206,37 +214,48 @@ _.extend(Component.prototype, {
 });
 
 function allElementsAreStrings(array) {
-    var allStrings = true;
-    _.each(array, function (element) {
-        if (!_.isString(element)) {
-            allStrings = false;
+    var i;
+
+    for (i = 0; i < array.length; i++) {
+        if (typeof array[i] !== 'string') {
             return false;
         }
-    });
-    return allStrings;
+    }
+
+    return true;
 }
 
 function mergeCaptures(subMatch, component, text, offset) {
-    var match = {
-        firstLine: subMatch.firstLine,
-        firstLineOffset: subMatch.firstLineOffset,
-        lines: subMatch.lines,
-        lastLine: subMatch.lastLine,
-        lastLineOffset: subMatch.lastLineOffset,
-        textOffset: subMatch.textOffset,
-        textLength: subMatch.textLength
-    };
+    var componentIndex,
+        components,
+        componentsCount,
+        subMatchComponent,
+        match = {
+            firstLine: subMatch.firstLine,
+            firstLineOffset: subMatch.firstLineOffset,
+            lines: subMatch.lines,
+            lastLine: subMatch.lastLine,
+            lastLineOffset: subMatch.lastLineOffset,
+            textOffset: subMatch.textOffset,
+            textLength: subMatch.textLength
+        };
 
+    // TODO: Perhaps we can make this logic to decide whether to join explicit,
+    //       avoiding the need to check with allElementsAreStrings()?
     if (allElementsAreStrings(subMatch.components)) {
         match.components = subMatch.components.join('');
     } else {
         match.components = {};
 
-        _.each(subMatch.components, function (value) {
-            if (_.isPlainObject(value)) {
-                copy(match.components, value);
+        components = subMatch.components;
+
+        for (componentIndex = 0, componentsCount = components.length; componentIndex < componentsCount; componentIndex++) {
+            subMatchComponent = components[componentIndex];
+
+            if (subMatchComponent !== null && typeof subMatchComponent === 'object' && !Array.isArray(subMatchComponent)) {
+                copy(match.components, subMatchComponent);
             }
-        });
+        }
 
         if (component.captureBoundsAs && subMatch.components.length > 1) {
             match.components[component.captureBoundsAs] = {
