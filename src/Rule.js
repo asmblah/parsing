@@ -11,7 +11,7 @@
 
 var _ = require('microdash'),
     copy = require('./copy'),
-    deepClone = require('./deepClone'),
+    deepFreeze = require('./deepFreeze'),
     undef,
     AbortException = require('./Exception/Abort'),
     ParseException = require('./Exception/Parse');
@@ -89,11 +89,10 @@ _.extend(Rule.prototype, {
      * @return {Object|null}
      */
     match: function (text, offset, line, lineOffset, options) {
-        var boundsCaptureName,
-            capturedOffset,
-            component,
+        var component,
             rule = this,
-            match = rule.matchCache[offset];
+            matchCache = rule.matchCache.cache,
+            match = matchCache[offset];
 
         /*
          * Left-recursion is handled by initially storing `true` in the match cache.
@@ -105,10 +104,12 @@ _.extend(Rule.prototype, {
         if (match === true) {
             match = undef;
 
-            rule.matchCache[offset] = null;
+            matchCache[offset] = null;
         } else if (match === undef) {
-            rule.matchCache[offset] = true;
+            matchCache[offset] = true;
         } else {
+            // Cache hit: the processed form is stored directly, so return it as-is.
+            // Processors are not re-run on backtracking.
             return match;
         }
 
@@ -118,7 +119,7 @@ _.extend(Rule.prototype, {
 
         if (match === null) {
             // Record the fact that this rule did _not_ match, so we don't attempt to match it again
-            rule.matchCache[offset] = null;
+            matchCache[offset] = null;
 
             return null;
         }
@@ -139,95 +140,25 @@ _.extend(Rule.prototype, {
                 textLength: match.textLength
             };
         } else {
-            if (!_.isString(match.components) && !match.components.name) {
+            if (typeof match.components !== 'string' && !match.components.name) {
                 match.components.name = rule.captureName || rule.name;
             }
         }
 
         if (rule.processor) {
-            boundsCaptureName = rule.component.getOffsetCaptureName();
+            // Run the processor before caching so the final processed form is stored.
+            // deepFreeze inside applyProcessor still protects sub-rule cache entries
+            // from mutation. Storing the processed form means cache hits return it
+            // directly with no re-run - including correct behaviour for context-dependent
+            // processors that consume context state (e.g. yieldEncountered).
+            var processedMatch = applyProcessor(rule, match, text, offset);
 
-            if (boundsCaptureName) {
-                capturedOffset = match.components[boundsCaptureName];
-            }
+            matchCache[offset] = processedMatch; // Null if the processor explicitly failed the match.
 
-            // Deep-clone the match to prevent processors from corrupting child rule caches.
-            // Processors may mutate nested properties, so a full deep clone is required.
-            // We use a fast custom clone rather than structuredClone as AST nodes only ever
-            // contain plain objects, arrays, strings, numbers and booleans.
-            match = deepClone(match);
-
-            match.components = rule.processor.call(
-                null,
-                match.components,
-
-                /**
-                 * Parses a given string by reentering the parser.
-                 * Note that the cache will be cleared which may affect performance.
-                 *
-                 * @param {string} text
-                 * @param {Options=} options
-                 * @param {string=} startRule
-                 * @returns {Object}
-                 */
-                function subParse(text, options, startRule) {
-                    var reentrantMatch = rule.parser.parse(text, options, startRule);
-
-                    // Ensure we clear the cache after reentering the parser, as the parent parser "scope"
-                    // could be corrupted by using the cache from this nested match.
-                    rule.parser.clearMatchCache();
-
-                    return reentrantMatch;
-                },
-
-                /**
-                 * Aborts the entire parse with a custom message and optional context.
-                 *
-                 * @param {string} message
-                 * @param {Object=} context
-                 */
-                function abort(message, context) {
-                    var errorHandler = rule.parser.getErrorHandler(),
-                        error = new ParseException(
-                            message,
-                            text,
-                            offset + match.textOffset,
-                            rule.parser.getFurthestMatchEnd(),
-                            context
-                        ),
-                        result;
-
-                    if (!errorHandler) {
-                        throw error;
-                    }
-
-                    result = errorHandler.handle(error);
-
-                    // Most ErrorHandlers are expected to throw, but if a result is returned instead
-                    // we throw this special Exception, which will be caught at the top level
-                    // and ensure that this result is returned from Parser.parse() instead.
-                    throw new AbortException(message, result);
-                },
-
-                // Context is a user-defined object with any data for the processor to use.
-                rule.context
-            );
-
-            if (match.components === null) {
-                // Match was explicitly failed by returning null from the processor.
-
-                // Record the fact that this rule did _not_ match, so we don't attempt to match it again.
-                rule.matchCache[offset] = null;
-
-                return null;
-            }
-
-            if (boundsCaptureName && match.components !== '') {
-                match.components[boundsCaptureName] = capturedOffset;
-            }
+            return processedMatch;
         }
 
-        rule.matchCache[offset] = match;
+        matchCache[offset] = match;
 
         return match;
     },
@@ -243,5 +174,121 @@ _.extend(Rule.prototype, {
         this.component = component;
     }
 });
+
+/**
+ * Applies the rule's processor to the given raw (pre-processor) match.
+ * The match's components are deep-frozen before being passed to the processor,
+ * enforcing that processors must return new objects rather than mutating in place.
+ * This protects any sub-rule results embedded in the components from mutation,
+ * since those objects are shared with sub-rule cache entries.
+ * Called only on cache misses; the processed result is cached so hits never re-run it.
+ *
+ * @param {Rule} rule
+ * @param {Object} rawMatch
+ * @param {string} text
+ * @param {number} offset
+ * @return {Object|null}
+ */
+function applyProcessor(rule, rawMatch, text, offset) {
+    var boundsCaptureName = rule.component.getOffsetCaptureName(),
+        capturedOffset,
+        processedComponents,
+        processedMatch;
+
+    if (boundsCaptureName) {
+        capturedOffset = rawMatch.components[boundsCaptureName];
+    }
+
+    // Freeze the structural form so the processor cannot mutate sub-rule cache entries
+    // embedded in the components tree.
+    deepFreeze(rawMatch.components);
+
+    processedComponents = rule.processor.call(
+        null,
+        rawMatch.components,
+
+        /**
+         * Parses a given string by reentering the parser.
+         * Note that the cache will be cleared which may affect performance.
+         *
+         * @param {string} subText
+         * @param {Options=} subOptions
+         * @param {string=} startRule
+         * @returns {Object}
+         */
+        function subParse(subText, subOptions, startRule) {
+            var reentrantMatch;
+
+            // Save the parent parse's memoised results before the nested parse() call
+            // clears the shared cache, then restore them afterwards.
+            rule.parser.pushMatchCaches();
+
+            try {
+                reentrantMatch = rule.parser.parse(subText, subOptions, startRule);
+            } finally {
+                rule.parser.popMatchCaches();
+            }
+
+            return reentrantMatch;
+        },
+
+        /**
+         * Aborts the entire parse with a custom message and optional context.
+         *
+         * @param {string} message
+         * @param {Object=} context
+         */
+        function abort(message, context) {
+            var errorHandler = rule.parser.getErrorHandler(),
+                error = new ParseException(
+                    message,
+                    text,
+                    offset + rawMatch.textOffset,
+                    rule.parser.getFurthestMatchEnd(),
+                    context
+                ),
+                result;
+
+            if (!errorHandler) {
+                throw error;
+            }
+
+            result = errorHandler.handle(error);
+
+            // Most ErrorHandlers are expected to throw, but if a result is returned instead
+            // we throw this special Exception, which will be caught at the top level
+            // and ensure that this result is returned from Parser.parse() instead.
+            throw new AbortException(message, result);
+        },
+
+        // Context is a user-defined object with any data for the processor to use.
+        rule.context
+    );
+
+    if (processedComponents === null) {
+        // Match was explicitly failed by returning null from the processor.
+        return null;
+    }
+
+    processedMatch = {
+        components: processedComponents,
+        isEmpty: rawMatch.isEmpty || false,
+        firstLine: rawMatch.firstLine,
+        firstLineOffset: rawMatch.firstLineOffset,
+        lines: rawMatch.lines,
+        lastLine: rawMatch.lastLine,
+        lastLineOffset: rawMatch.lastLineOffset,
+        textLength: rawMatch.textLength,
+        textOffset: rawMatch.textOffset
+    };
+
+    if (boundsCaptureName && processedMatch.components !== '') {
+        processedMatch.components = Object.assign({}, processedMatch.components, {
+            [boundsCaptureName]: capturedOffset
+        });
+    }
+
+    return processedMatch;
+}
 
 module.exports = Rule;

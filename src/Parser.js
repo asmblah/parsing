@@ -17,7 +17,8 @@ var _ = require('microdash'),
     Component = require('./Component'),
     Exception = require('./Exception/Exception'),
     ParseException = require('./Exception/Parse'),
-    Rule = require('./Rule');
+    Rule = require('./Rule'),
+    RuleComponent = require('./RuleComponent');
 
 function Parser(grammarSpec, stderr, options) {
     var context;
@@ -32,6 +33,8 @@ function Parser(grammarSpec, stderr, options) {
     this.furthestMatchOffset = -1;
     this.grammarSpec = grammarSpec;
     this.matchCaches = [];
+    this.matchCacheCount = 0; // Separately store the count to avoid expensive .length lookups.
+    this.matchCacheStack = [];
     this.options = options;
     this.rules = null;
     this.state = null;
@@ -57,28 +60,50 @@ function Parser(grammarSpec, stderr, options) {
             return new RegExp(source, flags);
         }
 
-        // Speed up repeated match tests in complex grammars by caching component matches
+        /*
+         * Speed up repeated match tests in complex grammars by caching component matches.
+         * Each cache is a holder object {cache: []} rather than a bare array so that
+         * pushMatchCaches/popMatchCaches can swap the inner array in O(1) without any
+         * per-entry copying, while Rule instances keep a stable reference to the holder.
+         */
         function createMatchCache() {
-            // Use an array for the match caches, as it can be cleared easily by just zeroing .length
-            // and the indexes into the cache are numeric anyway (input string offsets)
-            var matchCache = [];
-            parser.matchCaches.push(matchCache);
-            return matchCache;
+            var matchCacheHolder = {cache: []};
+
+            parser.matchCaches.push(matchCacheHolder);
+            parser.matchCacheCount++;
+
+            return matchCacheHolder;
         }
+
+        /*
+         * Caches the total whitespace-skip result (length + line counters) per starting offset.
+         * Multiple terminal rules that attempt to match at the same offset each call skipWhitespace();
+         * without this cache each call loops N+1 times through ignoreRule.match() even though
+         * those results are individually cached at the Rule level. This reduces the per-offset
+         * cost from O(terminals * whitespace-tokens) to O(1) after the first terminal is tried.
+         */
+        var whitespaceCache = createMatchCache();
+
+        parser.whitespaceCache = whitespaceCache;
 
         var qualifiers = {
                 // Like "(...)" grouping - 'arg' is an array of components that must all match
                 'allOf': function (text, offset, line, lineOffset, arg, args, options) {
-                    var firstLine = null,
+                    var component,
+                        componentMatch,
+                        firstLine = null,
                         firstLineOffset = null,
+                        i,
+                        length,
                         lines = 0,
                         lastLineOffset = lineOffset,
                         matches = [],
                         textLength = 0,
                         textOffset = null;
 
-                    _.each(arg, function (component) {
-                        var componentMatch = component.match(
+                    for (i = 0, length = arg.length; i < length; i++) {
+                        component = arg[i];
+                        componentMatch = component.match(
                             text,
                             offset + (textOffset || 0) + textLength,
                             line + lines,
@@ -88,15 +113,15 @@ function Parser(grammarSpec, stderr, options) {
 
                         if (componentMatch === null) {
                             matches = null;
-                            return false;
+                            break;
                         }
 
                         matches.push(componentMatch.components);
 
                         if (componentMatch.isEmpty) {
                             // Empty matches are possible when an "optionally" qualifier is used,
-                            // which must be treated specially as they should not fail the parent match
-                            return;
+                            // which must be treated specially as they should not fail the parent match.
+                            continue;
                         }
 
                         if (firstLine === null) {
@@ -113,7 +138,7 @@ function Parser(grammarSpec, stderr, options) {
                         } else {
                             textLength += componentMatch.textOffset;
                         }
-                    });
+                    }
 
                     if (firstLine === null) {
                         firstLine = 0;
@@ -133,16 +158,21 @@ function Parser(grammarSpec, stderr, options) {
                 },
                 // Like "|" (alternation) - 'arg' is an array of components, one of which must match
                 'oneOf': function (text, offset, line, lineOffset, arg, args, options) {
-                    var match = null;
+                    var component,
+                        componentMatch,
+                        i,
+                        length,
+                        match = null;
 
-                    _.each(arg, function (component) {
-                        var componentMatch = component.match(text, offset, line, lineOffset, options);
+                    for (i = 0, length = arg.length; i < length; i++) {
+                        component = arg[i];
+                        componentMatch = component.match(text, offset, line, lineOffset, options);
 
                         if (componentMatch !== null) {
                             match = componentMatch;
-                            return false;
+                            break;
                         }
-                    });
+                    }
 
                     return match;
                 },
@@ -239,7 +269,7 @@ function Parser(grammarSpec, stderr, options) {
                 },
                 // Refers to another rule
                 'rule': function (text, offset, line, lineOffset, arg, args, options) {
-                    var expectedText = hasOwn.call(args, 'text') ? args.text : null,
+                    var expectedText = args.text !== undefined ? args.text : null,
                         match = arg.match(text, offset, line, lineOffset, options);
 
                     if (match === null) {
@@ -259,9 +289,21 @@ function Parser(grammarSpec, stderr, options) {
                         whitespaceLastLineOffset = lineOffset;
 
                     function skipWhitespace() {
-                        var match;
+                        var match,
+                            whitespaceCacheEntry;
 
                         if (parser.ignoreRule && options.ignoreWhitespace !== false && args.ignoreWhitespace !== false) {
+                            whitespaceCacheEntry = whitespaceCache.cache[offset];
+
+                            if (whitespaceCacheEntry !== undefined) {
+                                // Efficiently skip the entire cached whitespace token run.
+                                whitespaceLength = whitespaceCacheEntry.length;
+                                whitespaceLines = whitespaceCacheEntry.lines;
+                                whitespaceLastLineOffset = whitespaceCacheEntry.lastLineOffset;
+
+                                return;
+                            }
+
                             // Prevent infinite recursion of whitespace skipper
                             while (
                                 (
@@ -278,20 +320,32 @@ function Parser(grammarSpec, stderr, options) {
                                 whitespaceLastLineOffset = match.lastLineOffset;
                                 whitespaceLength += match.textLength;
                             }
+
+                            whitespaceCache.cache[offset] = {
+                                length: whitespaceLength,
+                                lines: whitespaceLines,
+                                lastLineOffset: whitespaceLastLineOffset
+                            };
                         }
                     }
 
                     function replace(string) {
+                        var length,
+                            replacements,
+                            replaceIndex;
+
                         if (args.replace) {
-                            _.each(args.replace, function (data) {
-                                string = string.replace(data.pattern, data.replacement);
-                            });
+                            replacements = args.replace;
+
+                            for (replaceIndex = 0, length = replacements.length; replaceIndex < length; replaceIndex++) {
+                                string = string.replace(replacements[replaceIndex].pattern, replacements[replaceIndex].replacement);
+                            }
                         }
 
                         return string;
                     }
 
-                    if (_.isString(arg)) {
+                    if (typeof arg === 'string') {
                         skipWhitespace();
 
                         if (text.substr(offset + whitespaceLength, arg.length) === arg) {
@@ -340,17 +394,17 @@ function Parser(grammarSpec, stderr, options) {
                                 textOffset: whitespaceLength
                             };
                         }
-                    } else if (arg instanceof Component) {
+                    } else if (arg instanceof Component || arg instanceof RuleComponent) {
                         result = arg.match(text, offset, line, lineOffset, options);
 
-                        if (_.isString(result)) {
+                        if (typeof result === 'string') {
                             result = replace(result);
-                        } else if (result && _.isString(result.components)) {
+                        } else if (result && typeof result.components === 'string') {
                             result.components = replace(result.components);
                         }
 
                         return result;
-                    } else if (_.isFunction(arg)) {
+                    } else if (typeof arg === 'function') {
                         // Used by eg. the special <BOF> and <EOF> rules
                         skipWhitespace();
 
@@ -512,6 +566,7 @@ function Parser(grammarSpec, stderr, options) {
             function createComponent(componentSpec) {
                 var arg,
                     args = {},
+                    captureBoundsAs,
                     name = null,
                     qualifierName = null;
 
@@ -605,18 +660,36 @@ function Parser(grammarSpec, stderr, options) {
                     throw new Exception('Parser :: Invalid component - qualifier name "' + qualifierName + '" is invalid');
                 }
 
-                return new Component(
-                    parser,
-                    context,
-                    qualifierName,
-                    qualifiers[qualifierName],
-                    arg,
-                    args,
-                    name,
-                    parser.options.captureAllBounds ?
-                        grammarSpec.bounds || 'bounds' :
-                        null
-                );
+                captureBoundsAs = parser.options.captureAllBounds ?
+                    grammarSpec.bounds || 'bounds' :
+                    null;
+
+                return (
+                    qualifierName === 'rule' &&
+                    name === null &&
+                    args.ignoreWhitespace === undefined &&
+                    !args.modifier &&
+                    !args.captureBoundsAs &&
+                    args.allowMerge !== false &&
+                    args.text === undefined &&
+                    !arg.ifNoMatch
+                ) ?
+                    // For simple components that refer to a rule, use an efficient variant
+                    // that skips the branching logic inside Component.
+                    new RuleComponent(
+                        arg,
+                        captureBoundsAs
+                    ) :
+                    new Component(
+                        parser,
+                        context,
+                        qualifierName,
+                        qualifiers[qualifierName],
+                        arg,
+                        args,
+                        name,
+                        captureBoundsAs
+                    );
             }
 
             rules[ruleName].setComponent(createComponent(ruleSpec.components || ruleSpec));
@@ -645,12 +718,14 @@ function Parser(grammarSpec, stderr, options) {
 
 _.extend(Parser.prototype, {
     /**
-     * Clears the match cache for all rules of the loaded grammar
+     * Clears the match cache for all rules of the loaded grammar.
      */
     clearMatchCache: function () {
-        _.each(this.matchCaches, function (matchCache) {
-            matchCache.length = 0;
-        });
+        var caches = this.matchCaches, i, length;
+
+        for (i = 0, length = caches.length; i < length; i++) {
+            caches[i].cache.length = 0;
+        }
     },
 
     getErrorHandler: function () {
@@ -693,6 +768,16 @@ _.extend(Parser.prototype, {
         }
 
         return parser.furthestMatchOffset;
+    },
+
+    /**
+     * Fetches the current match-cache stack.
+     * Will be empty when not inside a nested parse.
+     *
+     * @returns {Array}
+     */
+    getMatchCacheStack: function () {
+        return this.matchCacheStack;
     },
 
     getState: function () {
@@ -822,7 +907,56 @@ _.extend(Parser.prototype, {
         }
 
         return match.components;
-    }
+    },
+
+    /**
+     * Restores the match-cache arrays and furthest-match cursors from the top of the stack,
+     * discarding any entries written by the nested parse.
+     */
+    popMatchCaches: function () {
+        var parser = this,
+            saved = parser.matchCacheStack.pop(),
+            savedCaches = saved.caches,
+            caches = parser.matchCaches,
+            i,
+            length;
+
+        for (i = 0, length = caches.length; i < length; i++) {
+            caches[i].cache = savedCaches[i];
+        }
+
+        parser.furthestIgnoreMatch = saved.furthestIgnoreMatch;
+        parser.furthestIgnoreMatchOffset = saved.furthestIgnoreMatchOffset;
+        parser.furthestMatch = saved.furthestMatch;
+        parser.furthestMatchOffset = saved.furthestMatchOffset;
+    },
+
+    /**
+     * Saves the current match-cache arrays and furthest-match cursors onto an internal stack,
+     * replacing each holder's array with a fresh empty one for the nested parse to use.
+     *
+     * Must be paired with a popMatchCaches() call (ideally in a try/finally).
+     */
+    pushMatchCaches: function () {
+        var parser = this,
+            caches = parser.matchCaches,
+            savedCaches = new Array(parser.matchCacheCount),
+            i,
+            length;
+
+        for (i = 0, length = parser.matchCacheCount; i < length; i++) {
+            savedCaches[i] = caches[i].cache;
+            caches[i].cache = [];
+        }
+
+        parser.matchCacheStack.push({
+            caches: savedCaches,
+            furthestIgnoreMatch: parser.furthestIgnoreMatch,
+            furthestIgnoreMatchOffset: parser.furthestIgnoreMatchOffset,
+            furthestMatch: parser.furthestMatch,
+            furthestMatchOffset: parser.furthestMatchOffset
+        });
+    },
 });
 
 module.exports = Parser;
